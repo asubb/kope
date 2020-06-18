@@ -38,11 +38,11 @@ object KrdGeneratorSpec : Spek({
                 val long: Long,
                 @Ignore
                 val ignore: String
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
@@ -58,16 +58,20 @@ object KrdGeneratorSpec : Spek({
                 at("/spec/names/singular").string().isEqualTo(singularName)
                 at("/spec/scope").string().isEqualTo(scope)
                 at("/spec/versions/0/name").string().isEqualTo(version)
-                at("/spec/versions/0/schema/openAPIV3Schema/properties").isNotNull()
+                at("/spec/versions/0/schema/openAPIV3Schema/properties").isNotMissing()
+                at("/spec/versions/0/schema/openAPIV3Schema/nullable").isMissing()
             }
         }
 
         it("should define fields properly") {
             assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                 at("/integer/type").string().isEqualTo("integer")
+                at("/integer/nullable").boolean().isFalse()
                 at("/string/type").string().isEqualTo("string")
+                at("/string/nullable").boolean().isFalse()
                 at("/long/type").string().isEqualTo("integer")
-                at("/ignore").isMissing().isEqualTo(true)
+                at("/long/nullable").boolean().isFalse()
+                at("/ignore").isMissing()
             }
         }
     }
@@ -85,18 +89,18 @@ object KrdGeneratorSpec : Spek({
         data class TestSimple(
                 @IntegerDefinition(1, 10)
                 val integer: Int
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
         it("should define fields properly") {
             assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                 at("/integer").all {
-                    isMissing().isFalse()
+                    isNotMissing()
                     at("/type").string().isEqualTo("integer")
                     at("/minimum").double().isEqualTo(1.0)
                     at("/maximum").double().isEqualTo(10.0)
@@ -123,11 +127,11 @@ object KrdGeneratorSpec : Spek({
                     pattern = "regex-pattern"
                 )
                 val s: String
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
@@ -157,11 +161,11 @@ object KrdGeneratorSpec : Spek({
         data class TestSimple(
                 val integer: Int?,
                 val string: String?
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
@@ -197,18 +201,18 @@ object KrdGeneratorSpec : Spek({
                         description = "My integer can be from 1 to 10"
                 )
                 val integer: Int
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
         it("should define fields properly") {
             assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                 at("/myInt").all {
-                    isMissing().isFalse()
+                    isNotMissing()
                     at("/type").string().isEqualTo("integer")
                     at("/description").string().isEqualTo("My integer can be from 1 to 10")
                 }
@@ -235,11 +239,11 @@ object KrdGeneratorSpec : Spek({
                 @PropertyDefinition(name = "nested")
                 val nestedObject: NestedObject,
                 val nullableNestedObject: NestedObject?
-        )
+        ) : Krd
 
         val obj by memoized(CachingMode.SCOPE) {
             yaml().readTree(
-                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+                    KrdGenerator(TestSimple::class).yaml.also { println(it) }
             )
         }
 
@@ -248,7 +252,7 @@ object KrdGeneratorSpec : Spek({
                 at("/nested").all {
                     isNotMissing()
                     at("/type").string().isEqualTo("object")
-                    at("/description").isMissing().isTrue()
+                    at("/description").isMissing()
                     at("/properties").all {
                         isNotMissing()
                         at("/integer").all {
@@ -263,7 +267,7 @@ object KrdGeneratorSpec : Spek({
                     isNotMissing()
                     at("/type").string().isEqualTo("object")
                     at("/nullable").boolean().isTrue()
-                    at("/description").isMissing().isTrue()
+                    at("/description").isMissing()
                     at("/properties").all {
                         isNotMissing()
                         at("/integer").all {
@@ -279,7 +283,7 @@ object KrdGeneratorSpec : Spek({
     }
 })
 
-private fun Assert<JsonNode>.isMissing(): Assert<Boolean> = prop("isMissing") { it.isMissingNode }
+private fun Assert<JsonNode>.isMissing() = transform { if (!it.isMissingNode) expected("to be missing") else it }
 
 private fun Assert<JsonNode>.isNotMissing(): Assert<JsonNode> = transform { if (it.isMissingNode) expected("to be not missing") else it }
 

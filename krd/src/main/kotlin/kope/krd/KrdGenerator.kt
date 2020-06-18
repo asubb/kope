@@ -10,15 +10,15 @@ import kotlin.reflect.KClass
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.jvmErasure
 
-fun yaml(): ObjectMapper = ObjectMapper(YAMLFactory()).registerKotlinModule()
+internal fun yaml(): ObjectMapper = ObjectMapper(YAMLFactory()).registerKotlinModule()
 
-class KrdGenerator(val clazz: KClass<*>) {
+class KrdGenerator(val clazz: KClass<out Krd>) {
 
-    fun generateYaml(): String {
-        val crdDefinition = customResourceDefinition()
+    val yaml: String by lazy { generateYaml() }
 
-        return yaml().writeValueAsString(crdDefinition)
-    }
+    val definition: CustomResourceDefinition by lazy { customResourceDefinition() }
+
+    private fun generateYaml(): String = yaml().writeValueAsString(definition)
 
     private fun customResourceDefinition(): CustomResourceDefinition {
         val resourceDefinition = clazz.findAnnotation<ResourceDefinition>()
@@ -44,7 +44,7 @@ class KrdGenerator(val clazz: KClass<*>) {
                             served = true
                             storage = true
                             schema {
-                                openAPIV3Schema = generateOpenV3SchemaOf(clazz)
+                                openAPIV3Schema = generateJsonSchemaOf(clazz)
                             }
                         }
                 )
@@ -53,14 +53,18 @@ class KrdGenerator(val clazz: KClass<*>) {
     }
 }
 
-private fun generateOpenV3SchemaOf(clazz: KClass<*>, annotations: List<Annotation> = emptyList()): JSONSchemaProps {
+private fun generateJsonSchemaOf(
+        clazz: KClass<*>,
+        annotations: List<Annotation> = emptyList(),
+        nullableProperty: Boolean = false
+): JSONSchemaProps {
     return newJSONSchemaProps {
         val propertyDefinition = annotations.firstOrNull { it is PropertyDefinition } as PropertyDefinition?
 
         if (propertyDefinition != null && propertyDefinition.description.isNotEmpty())
             description = propertyDefinition.description
 
-        if (clazz.createType().isSubtypeOf(Any::class.createType(nullable = true)))
+        if (nullableProperty)
             nullable = true
 
         when (clazz) {
@@ -89,11 +93,16 @@ private fun generateOpenV3SchemaOf(clazz: KClass<*>, annotations: List<Annotatio
                 type = "object"
                 properties = clazz.declaredMemberProperties.mapNotNull {
                     if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
+
                     val name = it.findAnnotation<PropertyDefinition>()
                             ?.name
                             ?.let { name -> if (name.isNotEmpty()) name else null }
                             ?: it.name
-                    name to generateOpenV3SchemaOf(it.returnType.jvmErasure, it.annotations)
+                    name to generateJsonSchemaOf(
+                            clazz = it.returnType.jvmErasure,
+                            annotations = it.annotations,
+                            nullableProperty = it.returnType.isMarkedNullable
+                    )
                 }.toMap()
             }
         }
