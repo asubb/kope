@@ -43,11 +43,18 @@ class KrdGenerator(val clazz: KClass<out Krd>) {
                             name = resourceDefinition.version
                             served = true
                             storage = true
-                            schema {
-                                openAPIV3Schema = generateJsonSchemaOf(clazz)
+                            if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1") {
+                                schema {
+                                    openAPIV3Schema = generateJsonSchemaOf(clazz)
+                                }
                             }
                         }
                 )
+                if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1beta1") {
+                    validation = newCustomResourceValidation {
+                        openAPIV3Schema = generateJsonSchemaOf(clazz)
+                    }
+                }
             }
         }
     }
