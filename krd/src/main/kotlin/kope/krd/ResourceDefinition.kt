@@ -16,5 +16,5 @@ annotation class ResourceDefinition(
 
 enum class Scope(val value: String) {
     NAMESPACED("Namespaced"),
-    CLUSTERED("Clustered")
+    CLUSTER("Cluster")
 }

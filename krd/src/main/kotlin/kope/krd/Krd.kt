@@ -1,3 +1,6 @@
 package kope.krd
 
-interface Krd
+interface Krd {
+    @Ignore
+    val name: String
+}

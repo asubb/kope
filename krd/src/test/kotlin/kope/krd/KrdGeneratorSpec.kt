@@ -39,7 +39,8 @@ object KrdGeneratorSpec : Spek({
                     val string: String,
                     val long: Long,
                     @Ignore
-                    val ignore: String
+                    val ignore: String,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -69,6 +70,7 @@ object KrdGeneratorSpec : Spek({
 
             it("should define fields properly") {
                 assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
+                    at("/name").isMissing()
                     at("/integer/type").string().isEqualTo("integer")
                     at("/integer/nullable").boolean().isFalse()
                     at("/string/type").string().isEqualTo("string")
@@ -92,7 +94,8 @@ object KrdGeneratorSpec : Spek({
             )
             data class TestSimple(
                     @IntegerDefinition(1, 10)
-                    val integer: Int
+                    val integer: Int,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -130,7 +133,8 @@ object KrdGeneratorSpec : Spek({
                             maxLength = 10,
                             pattern = "regex-pattern"
                     )
-                    val s: String
+                    val s: String,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -164,7 +168,8 @@ object KrdGeneratorSpec : Spek({
             )
             data class TestSimple(
                     val integer: Int?,
-                    val string: String?
+                    val string: String?,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -204,7 +209,8 @@ object KrdGeneratorSpec : Spek({
                             name = "myInt",
                             description = "My integer can be from 1 to 10"
                     )
-                    val integer: Int
+                    val integer: Int,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -242,7 +248,8 @@ object KrdGeneratorSpec : Spek({
             data class TestSimple(
                     @PropertyDefinition(name = "nested")
                     val nestedObject: NestedObject,
-                    val nullableNestedObject: NestedObject?
+                    val nullableNestedObject: NestedObject?,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
@@ -306,7 +313,8 @@ object KrdGeneratorSpec : Spek({
                     val string: String,
                     val long: Long,
                     @Ignore
-                    val ignore: String
+                    val ignore: String,
+                    override val name: String
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {

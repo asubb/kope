@@ -60,6 +60,13 @@ class KrdGenerator(val clazz: KClass<out Krd>) {
     }
 }
 
+private val krdMembersToIgnore by lazy {
+    Krd::class.declaredMemberProperties
+            .filter { it.findAnnotation<Ignore>() != null }
+            .map { it.name }
+            .toSet()
+}
+
 private fun generateJsonSchemaOf(
         clazz: KClass<*>,
         annotations: List<Annotation> = emptyList(),
@@ -100,6 +107,7 @@ private fun generateJsonSchemaOf(
                 type = "object"
                 properties = clazz.declaredMemberProperties.mapNotNull {
                     if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
+                    if (it.name in krdMembersToIgnore) return@mapNotNull null
 
                     val name = it.findAnnotation<PropertyDefinition>()
                             ?.name
