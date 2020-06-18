@@ -105,6 +105,43 @@ object KrdGeneratorSpec : Spek({
         }
     }
 
+    describe("Simple Model with property definitions for nullable primitives") {
+
+        @ResourceDefinition(
+                name = resourceName,
+                kind = kind,
+                singularName = singularName,
+                pluralName = pluralName,
+                group = group,
+                version = version
+        )
+        data class TestSimple(
+                val integer: Int?,
+                val string: String?
+        )
+
+        val obj by memoized(CachingMode.SCOPE) {
+            yaml().readTree(
+                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+            )
+        }
+
+        it("should define fields properly") {
+            assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
+                at("/integer").all {
+                    isNotMissing()
+                    at("/type").string().isEqualTo("integer")
+                    at("/nullable").boolean().isTrue()
+                }
+                at("/string").all {
+                    isNotMissing()
+                    at("/type").string().isEqualTo("string")
+                    at("/nullable").boolean().isTrue()
+                }
+            }
+        }
+    }
+
     describe("Simple Model with property definitions") {
 
         @ResourceDefinition(
@@ -157,7 +194,8 @@ object KrdGeneratorSpec : Spek({
         )
         data class TestSimple(
                 @PropertyDefinition(name = "nested")
-                val nestedObject: NestedObject
+                val nestedObject: NestedObject,
+                val nullableNestedObject: NestedObject?
         )
 
         val obj by memoized(CachingMode.SCOPE) {
@@ -171,6 +209,21 @@ object KrdGeneratorSpec : Spek({
                 at("/nested").all {
                     isNotMissing()
                     at("/type").string().isEqualTo("object")
+                    at("/description").isMissing().isTrue()
+                    at("/properties").all {
+                        isNotMissing()
+                        at("/integer").all {
+                            isNotMissing()
+                            at("/type").string().isEqualTo("integer")
+                            at("/minimum").double().isEqualTo(1.0)
+                            at("/maximum").double().isEqualTo(10.0)
+                        }
+                    }
+                }
+                at("/nullableNestedObject").all {
+                    isNotMissing()
+                    at("/type").string().isEqualTo("object")
+                    at("/nullable").boolean().isTrue()
                     at("/description").isMissing().isTrue()
                     at("/properties").all {
                         isNotMissing()
