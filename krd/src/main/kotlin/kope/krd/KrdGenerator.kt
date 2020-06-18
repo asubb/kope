@@ -66,6 +66,13 @@ private fun generateOpenV3SchemaOf(clazz: KClass<*>, annotations: List<Annotatio
         when (clazz) {
             String::class -> {
                 type = "string"
+                val stringDefinition = annotations.firstOrNull { it is StringDefinition } as StringDefinition?
+                if (stringDefinition != null) {
+                    if (stringDefinition.format.isNotEmpty()) format = stringDefinition.format
+                    if (stringDefinition.pattern.isNotEmpty()) pattern = stringDefinition.pattern
+                    if (stringDefinition.minLength >= 0) minLength = stringDefinition.minLength.toLong()
+                    if (stringDefinition.maxLength >= 0) maxLength = stringDefinition.maxLength.toLong()
+                }
             }
             Int::class, Long::class -> {
                 type = "integer"
@@ -76,9 +83,6 @@ private fun generateOpenV3SchemaOf(clazz: KClass<*>, annotations: List<Annotatio
                     if (integerDefinition.maximum < Int.MAX_VALUE)
                         maximum = integerDefinition.maximum.toDouble()
                 }
-            }
-            Long::class -> {
-                type = "integer"
             }
             else -> {
                 if (clazz.javaPrimitiveType != null) throw UnsupportedOperationException("$clazz support is not implemented")

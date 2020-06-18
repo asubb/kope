@@ -105,6 +105,45 @@ object KrdGeneratorSpec : Spek({
         }
     }
 
+    describe("Simple Model with property definitions for string") {
+
+        @ResourceDefinition(
+                name = resourceName,
+                kind = kind,
+                singularName = singularName,
+                pluralName = pluralName,
+                group = group,
+                version = version
+        )
+        data class TestSimple(
+                @StringDefinition(
+                    format = "some-format",
+                    minLength = 1,
+                    maxLength = 10,
+                    pattern = "regex-pattern"
+                )
+                val s: String
+        )
+
+        val obj by memoized(CachingMode.SCOPE) {
+            yaml().readTree(
+                    KrdGenerator(TestSimple::class).generateYaml().also { println(it) }
+            )
+        }
+
+        it("should define fields properly") {
+            assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
+                at("/s").all {
+                    isNotMissing()
+                    at("/format").string().isEqualTo("some-format")
+                    at("/pattern").string().isEqualTo("regex-pattern")
+                    at("/minLength").long().isEqualTo(1L)
+                    at("/maxLength").long().isEqualTo(10L)
+                }
+            }
+        }
+    }
+
     describe("Simple Model with property definitions for nullable primitives") {
 
         @ResourceDefinition(
@@ -254,6 +293,10 @@ private fun Assert<JsonNode>.string(): Assert<String> {
 
 private fun Assert<JsonNode>.double(): Assert<Double> {
     return prop("asDouble") { it.doubleValue() }
+}
+
+private fun Assert<JsonNode>.long(): Assert<Long> {
+    return prop("asLong") { it.longValue() }
 }
 
 private fun Assert<JsonNode>.boolean(): Assert<Boolean> {
