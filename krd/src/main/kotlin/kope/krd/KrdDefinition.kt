@@ -1,22 +1,29 @@
 package kope.krd
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.fkorotkov.kubernetes.apiextensions.*
 import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaProps
 import kotlin.reflect.KClass
-import kotlin.reflect.full.*
+import kotlin.reflect.full.declaredMemberProperties
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.jvm.jvmErasure
 
 internal fun yaml(): ObjectMapper = ObjectMapper(YAMLFactory()).registerKotlinModule()
+internal fun json(): ObjectMapper = ObjectMapper().registerKotlinModule()
 
-class KrdGenerator(val clazz: KClass<out Krd>) {
+class KrdDefinition(val clazz: KClass<out Krd>) {
 
     val yaml: String by lazy { generateYaml() }
 
     val definition: CustomResourceDefinition by lazy { customResourceDefinition() }
+
+    fun krdObject(obj: Krd): KrdObject = KrdObject(this, obj)
+
+    fun krdObjectFromJson(json: String): KrdObject = KrdObject.fromJsonTree(this, json().readTree(json) as ObjectNode)
 
     private fun generateYaml(): String = yaml().writeValueAsString(definition)
 
@@ -38,6 +45,7 @@ class KrdGenerator(val clazz: KClass<out Krd>) {
                     kind = resourceDefinition.kind
                     shortNames = resourceDefinition.shortNames.toList()
                 }
+                version = resourceDefinition.version
                 versions = listOf(
                         newCustomResourceDefinitionVersion {
                             name = resourceDefinition.version
@@ -58,13 +66,6 @@ class KrdGenerator(val clazz: KClass<out Krd>) {
             }
         }
     }
-}
-
-private val krdMembersToIgnore by lazy {
-    Krd::class.declaredMemberProperties
-            .filter { it.findAnnotation<Ignore>() != null }
-            .map { it.name }
-            .toSet()
 }
 
 private fun generateJsonSchemaOf(
@@ -92,33 +93,37 @@ private fun generateJsonSchemaOf(
                     if (stringDefinition.maxLength >= 0) maxLength = stringDefinition.maxLength.toLong()
                 }
             }
-            Int::class, Long::class -> {
-                type = "integer"
-                val integerDefinition = annotations.firstOrNull { it is IntegerDefinition } as IntegerDefinition?
-                if (integerDefinition != null) {
-                    if (integerDefinition.minimum > Int.MIN_VALUE)
-                        minimum = integerDefinition.minimum.toDouble()
-                    if (integerDefinition.maximum < Int.MAX_VALUE)
-                        maximum = integerDefinition.maximum.toDouble()
+            Short::class, Int::class, Long::class, Double::class, Float::class -> {
+                type = "number"
+                val numberDefinition = annotations.firstOrNull { it is NumberDefinition } as NumberDefinition?
+                if (numberDefinition != null) {
+                    if (numberDefinition.minimum != NAN)
+                        minimum = numberDefinition.minimum
+                    if (numberDefinition.maximum != NAN)
+                        maximum = numberDefinition.maximum
                 }
             }
             else -> {
                 if (clazz.javaPrimitiveType != null) throw UnsupportedOperationException("$clazz support is not implemented")
                 type = "object"
-                properties = clazz.declaredMemberProperties.mapNotNull {
-                    if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
-                    if (it.name in krdMembersToIgnore) return@mapNotNull null
+                val props = clazz.declaredMemberProperties
+                if (props.isEmpty()) {
+                    throw UnsupportedOperationException("Unsupported. For $clazz no properties were detected")
+                } else {
+                    properties = clazz.declaredMemberProperties.mapNotNull {
+                        if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
 
-                    val name = it.findAnnotation<PropertyDefinition>()
-                            ?.name
-                            ?.let { name -> if (name.isNotEmpty()) name else null }
-                            ?: it.name
-                    name to generateJsonSchemaOf(
-                            clazz = it.returnType.jvmErasure,
-                            annotations = it.annotations,
-                            nullableProperty = it.returnType.isMarkedNullable
-                    )
-                }.toMap()
+                        val name = it.findAnnotation<PropertyDefinition>()
+                                ?.name
+                                ?.let { name -> if (name.isNotEmpty()) name else null }
+                                ?: it.name
+                        name to generateJsonSchemaOf(
+                                clazz = it.returnType.jvmErasure,
+                                annotations = it.annotations,
+                                nullableProperty = it.returnType.isMarkedNullable
+                        )
+                    }.toMap()
+                }
             }
         }
     }

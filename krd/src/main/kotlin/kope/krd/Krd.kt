@@ -1,6 +1,9 @@
 package kope.krd
 
 interface Krd {
-    @Ignore
-    val name: String
+    val metadata: Metadata
 }
+
+data class Metadata (
+    val name: String
+)

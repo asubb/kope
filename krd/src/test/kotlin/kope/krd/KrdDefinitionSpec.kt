@@ -1,25 +1,24 @@
 package kope.krd
 
-import assertk.Assert
 import assertk.all
 import assertk.assertThat
-import assertk.assertions.*
-import assertk.assertions.support.expected
-import com.fasterxml.jackson.databind.JsonNode
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isTrue
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.lifecycle.CachingMode
 import org.spekframework.spek2.style.specification.describe
 
-const val resourceName = "krd.model"
-const val kind = "TestModel"
-const val singularName = "simpleTest"
-const val pluralName = "simpleTests"
-const val group = "krd"
-const val version = "v1"
+private const val resourceName = "krd.model"
+private const val kind = "TestModel"
+private const val singularName = "simpleTest"
+private const val pluralName = "simpleTests"
+private const val group = "krd"
+private const val version = "v1"
 
-val scope = Scope.NAMESPACED.value
+private val scope = Scope.NAMESPACED.value
 
-object KrdGeneratorSpec : Spek({
+object KrdDefinitionSpec : Spek({
 
     describe("Default apiVersion=apiextensions.k8s.io/v1") {
 
@@ -40,13 +39,11 @@ object KrdGeneratorSpec : Spek({
                     val long: Long,
                     @Ignore
                     val ignore: String,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define basics properly") {
@@ -71,11 +68,11 @@ object KrdGeneratorSpec : Spek({
             it("should define fields properly") {
                 assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                     at("/name").isMissing()
-                    at("/integer/type").string().isEqualTo("integer")
+                    at("/integer/type").string().isEqualTo("number")
                     at("/integer/nullable").boolean().isFalse()
                     at("/string/type").string().isEqualTo("string")
                     at("/string/nullable").boolean().isFalse()
-                    at("/long/type").string().isEqualTo("integer")
+                    at("/long/type").string().isEqualTo("number")
                     at("/long/nullable").boolean().isFalse()
                     at("/ignore").isMissing()
                 }
@@ -93,22 +90,20 @@ object KrdGeneratorSpec : Spek({
                     version = version
             )
             data class TestSimple(
-                    @IntegerDefinition(1, 10)
+                    @NumberDefinition(1.0, 10.0)
                     val integer: Int,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define fields properly") {
                 assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                     at("/integer").all {
                         isNotMissing()
-                        at("/type").string().isEqualTo("integer")
+                        at("/type").string().isEqualTo("number")
                         at("/minimum").double().isEqualTo(1.0)
                         at("/maximum").double().isEqualTo(10.0)
                     }
@@ -134,13 +129,11 @@ object KrdGeneratorSpec : Spek({
                             pattern = "regex-pattern"
                     )
                     val s: String,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define fields properly") {
@@ -169,20 +162,18 @@ object KrdGeneratorSpec : Spek({
             data class TestSimple(
                     val integer: Int?,
                     val string: String?,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define fields properly") {
                 assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                     at("/integer").all {
                         isNotMissing()
-                        at("/type").string().isEqualTo("integer")
+                        at("/type").string().isEqualTo("number")
                         at("/nullable").boolean().isTrue()
                     }
                     at("/string").all {
@@ -210,20 +201,18 @@ object KrdGeneratorSpec : Spek({
                             description = "My integer can be from 1 to 10"
                     )
                     val integer: Int,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define fields properly") {
                 assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
                     at("/myInt").all {
                         isNotMissing()
-                        at("/type").string().isEqualTo("integer")
+                        at("/type").string().isEqualTo("number")
                         at("/description").string().isEqualTo("My integer can be from 1 to 10")
                     }
                 }
@@ -233,7 +222,7 @@ object KrdGeneratorSpec : Spek({
         describe("Nested objects") {
 
             data class NestedObject(
-                    @IntegerDefinition(1, 10)
+                    @NumberDefinition(1.0, 10.0)
                     val integer: Int
             )
 
@@ -249,12 +238,12 @@ object KrdGeneratorSpec : Spek({
                     @PropertyDefinition(name = "nested")
                     val nestedObject: NestedObject,
                     val nullableNestedObject: NestedObject?,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
                 yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
+                        KrdDefinition(TestSimple::class).yaml.also { println(it) }
                 )
             }
 
@@ -268,7 +257,7 @@ object KrdGeneratorSpec : Spek({
                             isNotMissing()
                             at("/integer").all {
                                 isNotMissing()
-                                at("/type").string().isEqualTo("integer")
+                                at("/type").string().isEqualTo("number")
                                 at("/minimum").double().isEqualTo(1.0)
                                 at("/maximum").double().isEqualTo(10.0)
                             }
@@ -283,7 +272,7 @@ object KrdGeneratorSpec : Spek({
                             isNotMissing()
                             at("/integer").all {
                                 isNotMissing()
-                                at("/type").string().isEqualTo("integer")
+                                at("/type").string().isEqualTo("number")
                                 at("/minimum").double().isEqualTo(1.0)
                                 at("/maximum").double().isEqualTo(10.0)
                             }
@@ -314,13 +303,11 @@ object KrdGeneratorSpec : Spek({
                     val long: Long,
                     @Ignore
                     val ignore: String,
-                    override val name: String
+                    override val metadata: Metadata
             ) : Krd
 
             val obj by memoized(CachingMode.SCOPE) {
-                yaml().readTree(
-                        KrdGenerator(TestSimple::class).yaml.also { println(it) }
-                )
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
             }
 
             it("should define basics properly") {
@@ -344,11 +331,11 @@ object KrdGeneratorSpec : Spek({
 
             it("should define fields properly") {
                 assertThat(obj.at("/spec/validation/openAPIV3Schema/properties")).all {
-                    at("/integer/type").string().isEqualTo("integer")
+                    at("/integer/type").string().isEqualTo("number")
                     at("/integer/nullable").boolean().isFalse()
                     at("/string/type").string().isEqualTo("string")
                     at("/string/nullable").boolean().isFalse()
-                    at("/long/type").string().isEqualTo("integer")
+                    at("/long/type").string().isEqualTo("number")
                     at("/long/nullable").boolean().isFalse()
                     at("/ignore").isMissing()
                 }
@@ -356,28 +343,4 @@ object KrdGeneratorSpec : Spek({
         }
     }
 })
-
-private fun Assert<JsonNode>.isMissing() = transform { if (!it.isMissingNode) expected("to be missing") else it }
-
-private fun Assert<JsonNode>.isNotMissing(): Assert<JsonNode> = transform { if (it.isMissingNode) expected("to be not missing") else it }
-
-private fun Assert<JsonNode>.at(path: String): Assert<JsonNode> {
-    return prop("[$path]") { it.at(path) }
-}
-
-private fun Assert<JsonNode>.string(): Assert<String> {
-    return prop("asString") { it.textValue() }
-}
-
-private fun Assert<JsonNode>.double(): Assert<Double> {
-    return prop("asDouble") { it.doubleValue() }
-}
-
-private fun Assert<JsonNode>.long(): Assert<Long> {
-    return prop("asLong") { it.longValue() }
-}
-
-private fun Assert<JsonNode>.boolean(): Assert<Boolean> {
-    return prop("asBoolean") { it.booleanValue() }
-}
 
