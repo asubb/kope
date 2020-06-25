@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.fasterxml.jackson.databind.node.ObjectNode
 import java.math.BigDecimal
 import java.math.BigInteger
+import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.findAnnotation
@@ -59,7 +60,7 @@ private fun createTree(root: ObjectNode, obj: Any?, rootPropertyName: String): J
                 root.putObject(rootPropertyName).also {
                     properties.forEach { property ->
                         if (property.findAnnotation<Ignore>() == null) {
-                            val name = property.findAnnotation<PropertyDefinition>()?.name ?: property.name
+                            val name = extractPropertyName(property)
                             createTree(it, property.call(obj), name)
                         }
                     }
@@ -136,7 +137,7 @@ private fun JsonNode.readTree(
             val parameters = constructor.parameters.mapNotNull { parameter ->
                 val property = ktype.jvmErasure.declaredMemberProperties.firstOrNull { it.name == parameter.name }
                         ?: throw IllegalStateException("Can't find property for class $ktype for constructor parameter $parameter")
-                val nodeName = property.findAnnotation<PropertyDefinition>()?.name ?: property.name
+                val nodeName = extractPropertyName(property)
                 val o = this.readTree(property.returnType, path.append(JsonPointer.compile("/$nodeName")))
                 if (parameter.isOptional && o == null)
                     null
@@ -150,4 +151,11 @@ private fun JsonNode.readTree(
             }
         }
     }
+}
+
+private fun extractPropertyName(property: KProperty1<out Any, *>): String {
+    return property.findAnnotation<PropertyDefinition>()
+            ?.name
+            ?.takeIf { it.isNotEmpty() }
+            ?: property.name
 }

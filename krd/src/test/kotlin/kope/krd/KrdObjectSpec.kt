@@ -27,7 +27,9 @@ object KrdObjectSpec : Spek({
                 @PropertyDefinition("myLong")
                 val long: Long,
                 @PropertyDefinition("myByteArray")
-                val byteArray: ByteArray
+                val byteArray: ByteArray,
+                @PropertyDefinition(description = "description")
+                val anotherString: String
         ) {
             override fun equals(other: Any?): Boolean {
                 if (this === other) return true
@@ -106,7 +108,8 @@ object KrdObjectSpec : Spek({
                             innerObject = InnerObject(
                                     string = "string16",
                                     long = 17L,
-                                    byteArray = byteArrayOf(18, 19, 20, 21, 22, 23, 24)
+                                    byteArray = byteArrayOf(18, 19, 20, 21, 22, 23, 24),
+                                    anotherString = "25"
                             )
                     )
             )
@@ -142,6 +145,7 @@ object KrdObjectSpec : Spek({
                         at("/myString").string().isEqualTo("string16")
                         at("/myLong").long().isEqualTo(17L)
                         at("/myByteArray").byteArray().isEqualTo(byteArrayOf(18, 19, 20, 21, 22, 23, 24))
+                        at("/anotherString").string().isEqualTo("25")
                     }
                 }
             }
@@ -167,6 +171,7 @@ object KrdObjectSpec : Spek({
                     "double" : 12.0,
                     "float" : 13.0,
                     "innerObject" : {
+                      "anotherString" : "25",
                       "myByteArray" : "EhMUFRYXGA==",
                       "myLong" : 17,
                       "myString" : "string16"
