@@ -295,4 +295,89 @@ object KrdObjectSpec : Spek({
             assertThat(o).prop("obj") { o.obj }.isEqualTo(myObject)
         }
     }
+
+    describe("Iterables") {
+
+        data class NestedObject(
+                @PropertyDefinition("int")
+                val i: Int,
+                @PropertyDefinition("str")
+                val s: String
+        )
+
+        @ResourceDefinition(
+                name = resourceName,
+                kind = kind,
+                singularName = singularName,
+                pluralName = pluralName,
+                group = group,
+                version = version
+        )
+        data class MyObject(
+                override val metadata: Metadata,
+                @PropertyDefinition("myList")
+                val list: List<Set<NestedObject>>,
+                val set: Set<List<String>>
+        ) : Krd
+
+        val myObject by memoized(SCOPE) {
+            MyObject(
+                    Metadata(myObjectName),
+                    listOf(
+                            setOf(NestedObject(1, "2")),
+                            setOf(NestedObject(3, "4"), NestedObject(5, "6"))
+                    ),
+                    setOf(
+                            listOf("7", "8", "9")
+                    )
+            )
+        }
+
+        val krdDefinition by memoized(SCOPE) { KrdDefinition(MyObject::class) }
+
+        it("should serialize to a tree") {
+            val o = krdDefinition.krdObject(myObject)
+            assertThat(o.asJsonTree().also { println(it.toPrettyString()) }).all {
+                at("/apiVersion").string().isEqualTo("$group/$version")
+                at("/kind").string().isEqualTo(kind)
+                at("/metadata/name").string().isEqualTo(myObjectName)
+                at("/myList/0/0/int").integer().isEqualTo(1)
+                at("/myList/0/0/str").string().isEqualTo("2")
+                at("/myList/1/0/int").integer().isEqualTo(3)
+                at("/myList/1/0/str").string().isEqualTo("4")
+                at("/myList/1/1/int").integer().isEqualTo(5)
+                at("/myList/1/1/str").string().isEqualTo("6")
+                at("/set/0/0").string().isEqualTo("7")
+                at("/set/0/1").string().isEqualTo("8")
+                at("/set/0/2").string().isEqualTo("9")
+            }
+        }
+
+        it("should deserialize from string to an object") {
+            val json = """
+                {
+                  "myList" : [ [ {
+                    "int" : 1,
+                    "str" : "2"
+                  } ], [ {
+                    "int" : 3,
+                    "str" : "4"
+                  }, {
+                    "int" : 5,
+                    "str" : "6"
+                  } ] ],
+                  "metadata" : {
+                    "name" : "myPreciousObject"
+                  },
+                  "set" : [ [ "7", "8", "9" ] ],
+                  "apiVersion" : "example.com/v0.1.2.3",
+                  "kind" : "MyObject"
+                }
+            """.trimIndent()
+
+            val o = krdDefinition.krdObjectFromJson(json)
+
+            assertThat(o).prop("obj") { o.obj }.isEqualTo(myObject)
+        }
+    }
 })

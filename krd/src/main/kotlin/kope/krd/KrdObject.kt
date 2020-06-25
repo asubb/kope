@@ -2,14 +2,15 @@ package kope.krd
 
 import com.fasterxml.jackson.core.JsonPointer
 import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.fasterxml.jackson.databind.node.ObjectNode
 import java.math.BigDecimal
 import java.math.BigInteger
-import kotlin.reflect.KClass
 import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.jvmErasure
 import kotlin.reflect.typeOf
@@ -47,6 +48,11 @@ private fun createTree(root: ObjectNode, obj: Any?, rootPropertyName: String): J
             is BigInteger -> root.put(rootPropertyName, obj)
             is Boolean -> root.put(rootPropertyName, obj)
             is ByteArray -> root.put(rootPropertyName, obj)
+            is Iterable<*> -> {
+                root.putArray(rootPropertyName).also { array ->
+                    obj.forEach { addItem(array, it) }
+                }
+            }
             else -> {
                 if (!obj::class.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found ${obj::class}")
                 val properties = obj::class.declaredMemberProperties
@@ -65,22 +71,65 @@ private fun createTree(root: ObjectNode, obj: Any?, rootPropertyName: String): J
     }
 }
 
-private fun ObjectNode.readTree(
+private fun addItem(array: ArrayNode, item: Any?) {
+    if (item != null) {
+        when (item) {
+            is String -> array.add(item)
+            is Long -> array.add(item)
+            is Int -> array.add(item)
+            is Short -> array.add(item.toInt())
+            is Double -> array.add(item)
+            is Float -> array.add(item)
+            is BigDecimal -> array.add(item)
+            is BigInteger -> array.add(item)
+            is Boolean -> array.add(item)
+            is ByteArray -> array.add(item)
+            is Iterable<*> -> {
+                val innerArray = array.addArray()
+                item.forEach { addItem(innerArray, it) }
+            }
+            else -> {
+                if (!item::class.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found ${item::class}")
+                val node = createTree(JsonNodeFactory.instance.objectNode(), item, "!root")
+                array.add(node)
+            }
+        }
+    }
+}
+
+private fun JsonNode.readTree(
         ktype: KType,
         path: JsonPointer
 ): Any? {
-    if (this.at(path).isMissingNode) return null
-    return when (ktype) {
-        typeOf<String>(), typeOf<String?>() -> this.at(path).textValue()
-        typeOf<Int>(), typeOf<Int?>() -> this.at(path).intValue()
-        typeOf<Long>(), typeOf<Long?>() -> this.at(path).longValue()
-        typeOf<Short>(), typeOf<Short?>() -> this.at(path).shortValue()
-        typeOf<Double>(), typeOf<Double?>() -> this.at(path).doubleValue()
-        typeOf<Float>(), typeOf<Float?>() -> this.at(path).floatValue()
-        typeOf<BigDecimal>(), typeOf<BigDecimal?>() -> this.at(path).decimalValue()
-        typeOf<BigInteger>(), typeOf<BigInteger?>() -> this.at(path).bigIntegerValue()
-        typeOf<Boolean>(), typeOf<Boolean?>() -> this.at(path).booleanValue()
-        typeOf<ByteArray>(), typeOf<ByteArray?>() -> this.at(path).binaryValue()
+    val at = this.at(path)
+    if (at.isMissingNode) return null
+    return when {
+        ktype == typeOf<String>() || ktype == typeOf<String?>() -> at.textValue()
+        ktype == typeOf<Int>() || ktype == typeOf<Int?>() -> at.intValue()
+        ktype == typeOf<Long>() || ktype == typeOf<Long?>() -> at.longValue()
+        ktype == typeOf<Short>() || ktype == typeOf<Short?>() -> at.shortValue()
+        ktype == typeOf<Double>() || ktype == typeOf<Double?>() -> at.doubleValue()
+        ktype == typeOf<Float>() || ktype == typeOf<Float?>() -> at.floatValue()
+        ktype == typeOf<BigDecimal>() || ktype == typeOf<BigDecimal?>() -> at.decimalValue()
+        ktype == typeOf<BigInteger>() || ktype == typeOf<BigInteger?>() -> at.bigIntegerValue()
+        ktype == typeOf<Boolean>() || ktype == typeOf<Boolean?>() -> at.booleanValue()
+        ktype == typeOf<ByteArray>() || ktype == typeOf<ByteArray?>() -> at.binaryValue()
+        ktype.isSubtypeOf(typeOf<Iterable<*>>()) -> {
+            val itemType = ktype.arguments.getOrNull(0)?.type
+                    ?: throw UnsupportedOperationException(
+                            "Type parameters for iterable class are not as expected ${ktype.arguments}. " +
+                                    "Expected to be exactly one type parameter, i.e. List<MyClass>."
+                    )
+            if (!at.isArray) throw IllegalStateException("At $path expected array to fill in the Iterable type")
+            (0 until at.size()).map { this.readTree(itemType, path.append(JsonPointer.compile("/$it"))) }
+                    .let {
+                        when {
+                            ktype.isSubtypeOf(typeOf<Set<*>>()) -> it.toSet()
+                            ktype.isSubtypeOf(typeOf<List<*>>()) -> it.toList()
+                            else -> throw UnsupportedOperationException("Type $ktype is unsupported")
+                        }
+                    }
+        }
         else -> {
             if (!ktype.jvmErasure.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found $ktype")
             val constructor = ktype.jvmErasure.primaryConstructor!!
@@ -94,7 +143,11 @@ private fun ObjectNode.readTree(
                 else
                     parameter to o
             }.toMap()
-            constructor.callBy(parameters)
+            try {
+                constructor.callBy(parameters)
+            } catch (e: Exception) {
+                throw IllegalStateException("Can't call constructor $constructor of $ktype with parameters:\n$parameters", e)
+            }
         }
     }
 }
