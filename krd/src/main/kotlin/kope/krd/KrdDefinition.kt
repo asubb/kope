@@ -11,6 +11,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.starProjectedType
 import kotlin.reflect.jvm.jvmErasure
 import kotlin.reflect.typeOf
@@ -87,8 +88,8 @@ private fun generateJsonSchemaOf(
         if (nullableProperty)
             nullable = true
 
-        when (ktype) {
-            typeOf<String>(), typeOf<String?>() -> {
+        when {
+            ktype == typeOf<String>() || ktype == typeOf<String?>() -> {
                 type = "string"
                 val stringDefinition = annotations.firstOrNull { it is StringDefinition } as StringDefinition?
                 if (stringDefinition != null) {
@@ -98,8 +99,10 @@ private fun generateJsonSchemaOf(
                     if (stringDefinition.maxLength >= 0) maxLength = stringDefinition.maxLength.toLong()
                 }
             }
-            typeOf<Short>(), typeOf<Int>(), typeOf<Long>(), typeOf<Double>(), typeOf<Float>(),
-            typeOf<Short?>(), typeOf<Int?>(), typeOf<Long?>(), typeOf<Double?>(), typeOf<Float?>() -> {
+            ktype == typeOf<Short>() || ktype == typeOf<Int>() || ktype == typeOf<Long>() ||
+                    ktype == typeOf<Double>() || ktype == typeOf<Float>() || ktype == typeOf<Short?>() ||
+                    ktype == typeOf<Int?>() || ktype == typeOf<Long?>() || ktype == typeOf<Double?>() ||
+                    ktype == typeOf<Float?>() -> {
                 type = "number"
                 val numberDefinition = annotations.firstOrNull { it is NumberDefinition } as NumberDefinition?
                 if (numberDefinition != null) {
@@ -108,6 +111,20 @@ private fun generateJsonSchemaOf(
                     if (numberDefinition.maximum != NAN)
                         maximum = numberDefinition.maximum
                 }
+            }
+            ktype.isSubtypeOf(typeOf<Iterable<*>>()) -> {
+                type = "array"
+                // waiting https://github.com/fabric8io/kubernetes-client/pull/2281 to get a proper fix
+                items = kope.krd.JSONSchemaPropsOrArray(
+                        null,
+                        generateJsonSchemaOf(
+                                ktype.arguments.getOrNull(0)?.type
+                                        ?: throw UnsupportedOperationException(
+                                                "Type parameters for iterable class are not as expected ${ktype.arguments}. " +
+                                                        "Expected to be exactly one type parameter, i.e. List<MyClass>."
+                                        )
+                        )
+                )
             }
             else -> {
                 if (ktype.jvmErasure.javaPrimitiveType != null) throw UnsupportedOperationException("$ktype support is not implemented")

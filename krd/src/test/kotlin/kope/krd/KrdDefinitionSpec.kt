@@ -281,6 +281,69 @@ object KrdDefinitionSpec : Spek({
                 }
             }
         }
+
+        describe("Iterables") {
+
+            data class NeedToGoDeeper(
+                    @PropertyDefinition(name = "bigA")
+                    val a: Int,
+                    @PropertyDefinition(name = "bigB")
+                    val b: String,
+                    @PropertyDefinition(name = "bigC")
+                    val c: Float
+            )
+
+            data class NestedObject(
+                    @PropertyDefinition("myList", description = "My precious list")
+                    val list: List<Int>,
+                    val set: Set<NeedToGoDeeper>
+            )
+
+            @ResourceDefinition(
+                    name = resourceName,
+                    kind = kind,
+                    singularName = singularName,
+                    pluralName = pluralName,
+                    group = group,
+                    version = version
+            )
+            data class TestSimple(
+                    override val metadata: Metadata,
+                    @PropertyDefinition(description = "list of strings")
+                    val listOfString: List<String>,
+                    val nestedObjects: List<NestedObject>
+            ) : Krd
+
+            val obj by memoized(CachingMode.SCOPE) {
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
+            }
+
+            it("should define fields properly") {
+                assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
+                    at("/listOfString").all {
+                        at("/type").string().isEqualTo("array")
+                        at("/description").string().isEqualTo("list of strings")
+                        at("/items").all {
+                            at("/type").string().isEqualTo("string")
+                        }
+                    }
+                    at("/nestedObjects").all {
+                        at("/type").string().isEqualTo("array")
+                        at("/items/type").string().isEqualTo("object")
+                        at("/items/properties/myList/type").string().isEqualTo("array")
+                        at("/items/properties/myList/description").string().isEqualTo("My precious list")
+                        at("/items/properties/myList/items/type").string().isEqualTo("number")
+                        at("/items/properties/set").all {
+                            at("/type").string().isEqualTo("array")
+                            at("/items/type").string().isEqualTo("object")
+                            at("/items/properties/bigA/type").string().isEqualTo("number")
+                            at("/items/properties/bigB/type").string().isEqualTo("string")
+                            at("/items/properties/bigC/type").string().isEqualTo("number")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     describe("Differences for apiextensions.k8s.io/v1beta1") {
