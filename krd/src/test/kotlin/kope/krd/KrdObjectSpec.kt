@@ -385,4 +385,129 @@ object KrdObjectSpec : Spek({
             assertThat(o).prop("obj") { o.obj }.isEqualTo(myObject)
         }
     }
+
+    describe("Maps") {
+
+        data class NestedObject(
+                @PropertyDefinition("int")
+                val i: Int,
+                @PropertyDefinition("listMap")
+                val s: List<Map<String, Int>>
+        )
+
+        @ResourceDefinition(
+                name = resourceName,
+                kind = kind,
+                singularName = singularName,
+                pluralName = pluralName,
+                group = group,
+                version = version
+        )
+        data class MyObject(
+                override val metadata: Metadata,
+                @PropertyDefinition(description = "mapStringInt")
+                val simpleMap: Map<String, Int>,
+                val nestedObjectsAsValues: Map<String, NestedObject>,
+                @PropertyDefinition(name = "map")
+                val nestedMap: Map<String, Map<String, List<Float>>>
+        ) : Krd
+
+        val myObject by memoized(SCOPE) {
+            MyObject(
+                    Metadata(myObjectName),
+                    mapOf("f1" to 2, "f3" to 4),
+                    mapOf(
+                            "f5" to NestedObject(
+                                    6,
+                                    listOf(mapOf("f7" to 8, "f9" to 10))
+                            ),
+                            "f11" to NestedObject(
+                                    12,
+                                    listOf(
+                                            mapOf("f13" to 14, "f15" to 16),
+                                            mapOf("f17" to 18, "f19" to 20)
+                                    )
+                            )
+                    ),
+                    mapOf(
+                            "f21" to mapOf(
+                                    "f22" to listOf(23.0f, 24.0f),
+                                    "f25" to listOf(26.0f, 27.0f)
+                            ),
+                            "f28" to emptyMap()
+                    )
+            )
+        }
+
+        val krdDefinition by memoized(SCOPE) { KrdDefinition(MyObject::class) }
+
+        it("should serialize to a tree") {
+            val o = krdDefinition.krdObject(myObject)
+            assertThat(o.asJsonTree().also { println(it.toPrettyString()) }).all {
+                at("/apiVersion").string().isEqualTo("$group/$version")
+                at("/kind").string().isEqualTo(kind)
+                at("/metadata/name").string().isEqualTo(myObjectName)
+                at("/simpleMap/f1").integer().isEqualTo(2)
+                at("/simpleMap/f3").integer().isEqualTo(4)
+                at("/nestedObjectsAsValues/f5/int").integer().isEqualTo(6)
+                at("/nestedObjectsAsValues/f5/listMap/0/f7").integer().isEqualTo(8)
+                at("/nestedObjectsAsValues/f5/listMap/0/f9").integer().isEqualTo(10)
+                at("/nestedObjectsAsValues/f11/int").integer().isEqualTo(12)
+                at("/nestedObjectsAsValues/f11/listMap/0/f13").integer().isEqualTo(14)
+                at("/nestedObjectsAsValues/f11/listMap/0/f15").integer().isEqualTo(16)
+                at("/nestedObjectsAsValues/f11/listMap/1/f17").integer().isEqualTo(18)
+                at("/nestedObjectsAsValues/f11/listMap/1/f19").integer().isEqualTo(20)
+                at("/map/f21/f22").floatList().isEqualTo(listOf(23.0f, 24.0f))
+                at("/map/f21/f25").floatList().isEqualTo(listOf(26.0f, 27.0f))
+                at("/map/f28").isNotMissing()
+
+            }
+        }
+
+        it("should deserialize from string to an object") {
+            val json = """
+                {
+                  "metadata" : {
+                    "name" : "myPreciousObject"
+                  },
+                  "map" : {
+                    "f21" : {
+                      "f22" : [ 23.0, 24.0 ],
+                      "f25" : [ 26.0, 27.0 ]
+                    },
+                    "f28" : { }
+                  },
+                  "nestedObjectsAsValues" : {
+                    "f5" : {
+                      "int" : 6,
+                      "listMap" : [ {
+                        "f7" : 8,
+                        "f9" : 10
+                      } ]
+                    },
+                    "f11" : {
+                      "int" : 12,
+                      "listMap" : [ {
+                        "f13" : 14,
+                        "f15" : 16
+                      }, {
+                        "f17" : 18,
+                        "f19" : 20
+                      } ]
+                    }
+                  },
+                  "simpleMap" : {
+                    "f1" : 2,
+                    "f3" : 4
+                  },
+                  "apiVersion" : "example.com/v0.1.2.3",
+                  "kind" : "MyObject"
+                }
+            """.trimIndent()
+
+            val o = krdDefinition.krdObjectFromJson(json)
+
+            assertThat(o).prop("obj") { o.obj }.isEqualTo(myObject)
+        }
+    }
 })

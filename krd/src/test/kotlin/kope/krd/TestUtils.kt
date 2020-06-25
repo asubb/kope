@@ -35,6 +35,10 @@ fun Assert<JsonNode>.integer(): Assert<Int> {
     return prop("asInt") { it.intValue() }
 }
 
+fun Assert<JsonNode>.floatList(): Assert<List<Float>> {
+    return prop("asFloatList") { it.map { it.floatValue() } }
+}
+
 fun Assert<JsonNode>.boolean(): Assert<Boolean> {
     return prop("asBoolean") { it.booleanValue() }
 }

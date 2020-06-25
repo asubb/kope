@@ -54,6 +54,14 @@ private fun createTree(root: ObjectNode, obj: Any?, rootPropertyName: String): J
                     obj.forEach { addItem(array, it) }
                 }
             }
+            is Map<*, *> -> {
+                root.putObject(rootPropertyName).also {
+                    obj.entries.forEach { (key, value) ->
+                        if (key !is String) throw UnsupportedOperationException("Maps with String as a key only are supported")
+                        createTree(it, value, key)
+                    }
+                }
+            }
             else -> {
                 if (!obj::class.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found ${obj::class}")
                 val properties = obj::class.declaredMemberProperties
@@ -88,6 +96,10 @@ private fun addItem(array: ArrayNode, item: Any?) {
             is Iterable<*> -> {
                 val innerArray = array.addArray()
                 item.forEach { addItem(innerArray, it) }
+            }
+            is Map<*, *> -> {
+                val node = createTree(JsonNodeFactory.instance.objectNode(), item, "!root")
+                array.add(node)
             }
             else -> {
                 if (!item::class.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found ${item::class}")
@@ -130,6 +142,13 @@ private fun JsonNode.readTree(
                             else -> throw UnsupportedOperationException("Type $ktype is unsupported")
                         }
                     }
+        }
+        ktype.isSubtypeOf(typeOf<Map<String, *>>()) -> {
+            val valueKtype = ktype.arguments.getOrNull(1)?.type
+                    ?: throw IllegalStateException("Can't access second type parameter of the Map $ktype")
+            at.fields().asSequence().map { (key, _) ->
+                key to this.readTree(valueKtype, path.append(JsonPointer.compile("/$key")))
+            }.toMap()
         }
         else -> {
             if (!ktype.jvmErasure.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found $ktype")
