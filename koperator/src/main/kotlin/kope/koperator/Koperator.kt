@@ -8,14 +8,34 @@ import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
 import kope.krd.Krd
 import kope.krd.KrdDefinition
 import mu.KotlinLogging
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import kotlin.reflect.KClass
 
 internal fun json(): ObjectMapper = ObjectMapper().registerKotlinModule()
 
-interface Koperator<K : Kontroller> {
-    val resources: List<KClass<out Krd>>
+abstract class Koperator<K : Kontroller> {
 
-    val kontroller: K
+    protected val pool = Executors.newSingleThreadExecutor()
+
+    abstract val resources: List<KClass<out Krd>>
+
+    abstract val kontroller: K
+
+    open fun initialize() {
+        kontroller.initialize()
+    }
+
+    open fun await(): Future<Unit> {
+        return pool.submit(Callable {
+            kontroller.main()
+        })
+    }
+
+    open fun tearDown() {
+        kontroller.tearDown()
+    }
 }
 
 fun Koperator<*>.install(client: KubernetesClient) {
@@ -32,9 +52,15 @@ fun Koperator<*>.install(client: KubernetesClient) {
 }
 
 interface Kontroller {
-    val client: KubernetesClient
-}
 
+    val client: KubernetesClient
+
+    fun initialize() {}
+
+    fun main()
+
+    fun tearDown() {}
+}
 
 fun KubernetesClient.create(obj: Krd) {
     try {

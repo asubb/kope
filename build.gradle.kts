@@ -3,6 +3,9 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     val kotlinVersion: String by System.getProperties()
     kotlin("jvm") version kotlinVersion
+
+    `java-library`
+    `maven-publish`
 }
 
 allprojects {
@@ -49,6 +52,29 @@ allprojects {
         systemProperty("SPEK_TIMEOUT", 0)
         useJUnitPlatform {
             includeEngines("spek2")
+        }
+    }
+
+    tasks.jar {
+        manifest {
+            attributes(
+                    "Kope-Version" to properties["version"]
+            )
+        }
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("krd") {
+            from(subprojects.first { it.name == "krd" }.components["java"])
+            groupId = "kope"
+            artifactId = "krd"
+        }
+        create<MavenPublication>("koperator") {
+            from(subprojects.first { it.name == "koperator" }.components["java"])
+            groupId = "kope"
+            artifactId = "koperator"
         }
     }
 }
