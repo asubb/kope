@@ -7,16 +7,18 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import java.math.BigDecimal
 import java.math.BigInteger
 import kotlin.reflect.KClass
+import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.jvmErasure
+import kotlin.reflect.typeOf
 
 class KrdObject(val krdDefinition: KrdDefinition, val obj: Krd) {
 
     companion object {
         fun fromJsonTree(krdDefinition: KrdDefinition, json: ObjectNode): KrdObject {
-            val obj = json.readTree(krdDefinition.clazz, JsonPointer.empty()) as Krd
+            val obj = json.readTree(krdDefinition.ktype, JsonPointer.empty()) as Krd
             return KrdObject(krdDefinition, obj)
         }
     }
@@ -64,29 +66,29 @@ private fun createTree(root: ObjectNode, obj: Any?, rootPropertyName: String): J
 }
 
 private fun ObjectNode.readTree(
-        clazz: KClass<*>,
+        ktype: KType,
         path: JsonPointer
 ): Any? {
     if (this.at(path).isMissingNode) return null
-    return when (clazz) {
-        String::class -> this.at(path).textValue()
-        Int::class -> this.at(path).intValue()
-        Long::class -> this.at(path).longValue()
-        Short::class -> this.at(path).shortValue()
-        Double::class -> this.at(path).doubleValue()
-        Float::class -> this.at(path).floatValue()
-        BigDecimal::class -> this.at(path).decimalValue()
-        BigInteger::class -> this.at(path).bigIntegerValue()
-        Boolean::class -> this.at(path).booleanValue()
-        ByteArray::class -> this.at(path).binaryValue()
+    return when (ktype) {
+        typeOf<String>(), typeOf<String?>() -> this.at(path).textValue()
+        typeOf<Int>(), typeOf<Int?>() -> this.at(path).intValue()
+        typeOf<Long>(), typeOf<Long?>() -> this.at(path).longValue()
+        typeOf<Short>(), typeOf<Short?>() -> this.at(path).shortValue()
+        typeOf<Double>(), typeOf<Double?>() -> this.at(path).doubleValue()
+        typeOf<Float>(), typeOf<Float?>() -> this.at(path).floatValue()
+        typeOf<BigDecimal>(), typeOf<BigDecimal?>() -> this.at(path).decimalValue()
+        typeOf<BigInteger>(), typeOf<BigInteger?>() -> this.at(path).bigIntegerValue()
+        typeOf<Boolean>(), typeOf<Boolean?>() -> this.at(path).booleanValue()
+        typeOf<ByteArray>(), typeOf<ByteArray?>() -> this.at(path).binaryValue()
         else -> {
-            if (!clazz.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found ${clazz}")
-            val constructor = clazz.primaryConstructor!!
+            if (!ktype.jvmErasure.isData) throw UnsupportedOperationException("As classes only data classes are supported right now but found $ktype")
+            val constructor = ktype.jvmErasure.primaryConstructor!!
             val parameters = constructor.parameters.mapNotNull { parameter ->
-                val property = clazz.declaredMemberProperties.firstOrNull { it.name == parameter.name }
-                        ?: throw IllegalStateException("Can't find property for class $clazz for constructor parameter $parameter")
+                val property = ktype.jvmErasure.declaredMemberProperties.firstOrNull { it.name == parameter.name }
+                        ?: throw IllegalStateException("Can't find property for class $ktype for constructor parameter $parameter")
                 val nodeName = property.findAnnotation<PropertyDefinition>()?.name ?: property.name
-                val o = this.readTree(property.returnType.jvmErasure, path.append(JsonPointer.compile("/$nodeName")))
+                val o = this.readTree(property.returnType, path.append(JsonPointer.compile("/$nodeName")))
                 if (parameter.isOptional && o == null)
                     null
                 else

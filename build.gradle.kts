@@ -48,6 +48,10 @@ allprojects {
         withSourcesJar()
     }
 
+    tasks.withType<KotlinCompile>().all {
+        kotlinOptions.freeCompilerArgs += "-Xopt-in=kotlin.ExperimentalStdlibApi"
+    }
+
     tasks.test {
         systemProperty("SPEK_TIMEOUT", 0)
         useJUnitPlatform {

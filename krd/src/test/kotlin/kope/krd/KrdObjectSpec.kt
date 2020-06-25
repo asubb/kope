@@ -16,7 +16,7 @@ private const val group = "example.com"
 private const val singularName = "myObject"
 private const val pluralName = "myObjects"
 private const val version = "v0.1.2.3"
-private val myObjectName = "myPreciousObject"
+private const val myObjectName = "myPreciousObject"
 
 object KrdObjectSpec : Spek({
     describe("Complex object") {

@@ -8,14 +8,19 @@ import com.fkorotkov.kubernetes.apiextensions.*
 import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaProps
 import kotlin.reflect.KClass
+import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.starProjectedType
 import kotlin.reflect.jvm.jvmErasure
+import kotlin.reflect.typeOf
 
 internal fun yaml(): ObjectMapper = ObjectMapper(YAMLFactory()).registerKotlinModule()
 internal fun json(): ObjectMapper = ObjectMapper().registerKotlinModule()
 
 class KrdDefinition(val clazz: KClass<out Krd>) {
+
+    val ktype: KType = clazz.starProjectedType
 
     val yaml: String by lazy { generateYaml() }
 
@@ -28,8 +33,8 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
     private fun generateYaml(): String = yaml().writeValueAsString(definition)
 
     private fun customResourceDefinition(): CustomResourceDefinition {
-        val resourceDefinition = clazz.findAnnotation<ResourceDefinition>()
-                ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $clazz")
+        val resourceDefinition = ktype.jvmErasure.findAnnotation<ResourceDefinition>()
+                ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $ktype")
         return newCustomResourceDefinition {
             apiVersion = resourceDefinition.apiVersion
             metadata {
@@ -53,14 +58,14 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
                             storage = true
                             if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1") {
                                 schema {
-                                    openAPIV3Schema = generateJsonSchemaOf(clazz)
+                                    openAPIV3Schema = generateJsonSchemaOf(ktype)
                                 }
                             }
                         }
                 )
                 if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1beta1") {
                     validation = newCustomResourceValidation {
-                        openAPIV3Schema = generateJsonSchemaOf(clazz)
+                        openAPIV3Schema = generateJsonSchemaOf(ktype)
                     }
                 }
             }
@@ -69,7 +74,7 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
 }
 
 private fun generateJsonSchemaOf(
-        clazz: KClass<*>,
+        ktype: KType,
         annotations: List<Annotation> = emptyList(),
         nullableProperty: Boolean = false
 ): JSONSchemaProps {
@@ -82,8 +87,8 @@ private fun generateJsonSchemaOf(
         if (nullableProperty)
             nullable = true
 
-        when (clazz) {
-            String::class -> {
+        when (ktype) {
+            typeOf<String>(), typeOf<String?>() -> {
                 type = "string"
                 val stringDefinition = annotations.firstOrNull { it is StringDefinition } as StringDefinition?
                 if (stringDefinition != null) {
@@ -93,7 +98,8 @@ private fun generateJsonSchemaOf(
                     if (stringDefinition.maxLength >= 0) maxLength = stringDefinition.maxLength.toLong()
                 }
             }
-            Short::class, Int::class, Long::class, Double::class, Float::class -> {
+            typeOf<Short>(), typeOf<Int>(), typeOf<Long>(), typeOf<Double>(), typeOf<Float>(),
+            typeOf<Short?>(), typeOf<Int?>(), typeOf<Long?>(), typeOf<Double?>(), typeOf<Float?>() -> {
                 type = "number"
                 val numberDefinition = annotations.firstOrNull { it is NumberDefinition } as NumberDefinition?
                 if (numberDefinition != null) {
@@ -104,13 +110,13 @@ private fun generateJsonSchemaOf(
                 }
             }
             else -> {
-                if (clazz.javaPrimitiveType != null) throw UnsupportedOperationException("$clazz support is not implemented")
+                if (ktype.jvmErasure.javaPrimitiveType != null) throw UnsupportedOperationException("$ktype support is not implemented")
                 type = "object"
-                val props = clazz.declaredMemberProperties
+                val props = ktype.jvmErasure.declaredMemberProperties
                 if (props.isEmpty()) {
-                    throw UnsupportedOperationException("Unsupported. For $clazz no properties were detected")
+                    throw UnsupportedOperationException("Unsupported. For $ktype no properties were detected")
                 } else {
-                    properties = clazz.declaredMemberProperties.mapNotNull {
+                    properties = ktype.jvmErasure.declaredMemberProperties.mapNotNull {
                         if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
 
                         val name = it.findAnnotation<PropertyDefinition>()
@@ -118,7 +124,7 @@ private fun generateJsonSchemaOf(
                                 ?.let { name -> if (name.isNotEmpty()) name else null }
                                 ?: it.name
                         name to generateJsonSchemaOf(
-                                clazz = it.returnType.jvmErasure,
+                                ktype = it.returnType,
                                 annotations = it.annotations,
                                 nullableProperty = it.returnType.isMarkedNullable
                         )
