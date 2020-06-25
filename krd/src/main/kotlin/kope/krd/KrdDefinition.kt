@@ -7,6 +7,7 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.fkorotkov.kubernetes.apiextensions.*
 import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition
 import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaProps
+import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrBool
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
@@ -111,6 +112,11 @@ private fun generateJsonSchemaOf(
                     if (numberDefinition.maximum != NAN)
                         maximum = numberDefinition.maximum
                 }
+            }
+            ktype.isSubtypeOf(typeOf<Map<String, *>>()) -> {
+                type = "object"
+                // waiting https://github.com/fabric8io/kubernetes-client/pull/2281 to get a proper fix
+                additionalProperties = kope.krd.JSONSchemaPropsOrBool(true, null)
             }
             ktype.isSubtypeOf(typeOf<Iterable<*>>()) -> {
                 type = "array"

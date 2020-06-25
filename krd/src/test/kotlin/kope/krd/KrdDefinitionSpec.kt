@@ -344,6 +344,56 @@ object KrdDefinitionSpec : Spek({
                 }
             }
         }
+
+        describe("Maps") {
+
+            data class NestedObject(
+                    @PropertyDefinition(name = "bigA")
+                    val a: Int,
+                    @PropertyDefinition(name = "bigB")
+                    val b: String,
+                    @PropertyDefinition(name = "bigC")
+                    val c: Float
+            )
+
+            @ResourceDefinition(
+                    name = resourceName,
+                    kind = kind,
+                    singularName = singularName,
+                    pluralName = pluralName,
+                    group = group,
+                    version = version
+            )
+            data class TestSimple(
+                    override val metadata: Metadata,
+                    @PropertyDefinition(description = "mapStringInt")
+                    val simpleMap: Map<String, Int>,
+                    val nestedObjectsAsValues: Map<String, NestedObject>,
+                    @PropertyDefinition(name = "map")
+                    val nestedMap: Map<String, Map<String, Float>>
+            ) : Krd
+
+            val obj by memoized(CachingMode.SCOPE) {
+                yaml().readTree(KrdDefinition(TestSimple::class).yaml.also { println(it) })
+            }
+
+            it("should define fields properly") {
+                assertThat(obj.at("/spec/versions/0/schema/openAPIV3Schema/properties")).all {
+                    at("/simpleMap").all {
+                        at("/type").string().isEqualTo("object")
+                        at("/additionalProperties").boolean().isEqualTo(true)
+                    }
+                    at("/nestedObjectsAsValues").all {
+                        at("/type").string().isEqualTo("object")
+                        at("/additionalProperties").boolean().isEqualTo(true)
+                    }
+                    at("/map").all {
+                        at("/type").string().isEqualTo("object")
+                        at("/additionalProperties").boolean().isEqualTo(true)
+                    }
+                }
+            }
+        }
     }
 
     describe("Differences for apiextensions.k8s.io/v1beta1") {
