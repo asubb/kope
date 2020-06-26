@@ -1,5 +1,6 @@
 package kope.koperator
 
+import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClient
 import mu.KotlinLogging
@@ -18,6 +19,7 @@ fun main(args: Array<String>) {
 
     lateinit var koperatorClass: KClass<Koperator<*>>
     var doInstall = false
+    var kubernetesContext: String? = null
 
     val handlers = mapOf<String, (String?) -> Unit>(
             "class" to { arg ->
@@ -26,7 +28,11 @@ fun main(args: Array<String>) {
                 koperatorClass = (Thread.currentThread().contextClassLoader.loadClass(arg) as Class<Koperator<*>>).kotlin
                 log.info { "Found Koperator class $koperatorClass" }
             },
-            "install" to { _ -> doInstall = true }
+            "install" to { _ -> doInstall = true },
+            "context" to { arg ->
+                require(arg != null) { "Parameter --profile requires to have a value." }
+                kubernetesContext = arg
+            }
     )
 
     args.forEach { arg ->
@@ -36,7 +42,9 @@ fun main(args: Array<String>) {
         handler(if (v.size > 1) v[1] else null)
     }
 
-    val client = DefaultKubernetesClient()
+    val client = DefaultKubernetesClient(
+            Config.autoConfigure(kubernetesContext)
+    )
     log.info { "Kubernetes client created $client" }
 
     val koperator = koperatorClass.constructors

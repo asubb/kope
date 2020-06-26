@@ -13,9 +13,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import kotlin.reflect.KClass
 
-internal fun json(): ObjectMapper = ObjectMapper().registerKotlinModule()
-
 abstract class Koperator<K : Kontroller> {
+
+    companion object {
+        private val log = KotlinLogging.logger {}
+    }
 
     protected val pool = Executors.newSingleThreadExecutor()
 
@@ -24,17 +26,23 @@ abstract class Koperator<K : Kontroller> {
     abstract val kontroller: K
 
     open fun initialize() {
+        log.info { "[$this] Kontroller initializing..." }
         kontroller.initialize()
+        log.info { "[$this] Kontroller initialized" }
     }
 
     open fun await(): Future<Unit> {
         return pool.submit(Callable {
+            log.info { "[$this] Kontroller main loop started" }
             kontroller.main()
+            log.info { "[$this] Kontroller main loop finished" }
         })
     }
 
     open fun tearDown() {
+        log.info { "[$this] Kontroller tearing down..." }
         kontroller.tearDown()
+        log.info { "[$this] Kontroller torn down" }
     }
 }
 
@@ -48,29 +56,6 @@ fun Koperator<*>.install(client: KubernetesClient) {
         } catch (e: KubernetesClientException) {
             throw KoperatorException("\"Installing resource $krd with definition failed:\\n${g.yaml}\"", e)
         }
-    }
-}
-
-interface Kontroller {
-
-    val client: KubernetesClient
-
-    fun initialize() {}
-
-    fun main()
-
-    fun tearDown() {}
-}
-
-fun KubernetesClient.create(obj: Krd) {
-    try {
-        val krd = KrdDefinition(obj::class)
-        val krdObject = krd.krdObject(obj)
-
-        val resource = customResource(CustomResourceDefinitionContext.fromCrd(krd.definition))
-        resource.create(json().writeValueAsString(krdObject.asJsonTree()))
-    } catch (e: KubernetesClientException) {
-        throw KoperatorException("Can't create $obj", e)
     }
 }
 
