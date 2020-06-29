@@ -1,7 +1,5 @@
 package kope.koperator
 
-import io.fabric8.kubernetes.client.Config
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClient
 import kope.koperator.Action.INSTALL
 import kope.koperator.Action.RUN
@@ -49,9 +47,7 @@ fun main(args: Array<String>) {
         handler(if (v.size > 1) v[1] else null)
     }
 
-    val client = DefaultKubernetesClient(
-            Config.autoConfigure(kubernetesContext)
-    )
+    val client = kubernetesClient(kubernetesContext)
     log.info { "Kubernetes client created $client" }
 
     val koperator = koperatorClass.constructors
@@ -59,7 +55,6 @@ fun main(args: Array<String>) {
             ?.call(client)
             ?: throw IllegalStateException("Can't find constructor of $koperatorClass with ${KubernetesClient::class} as the only parameter")
     log.info { "[$koperator] Koperator instantiated" }
-
 
     Launcher(koperator, action, client).use {
         it.run()
