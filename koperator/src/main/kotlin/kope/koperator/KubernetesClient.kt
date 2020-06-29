@@ -7,9 +7,11 @@ import io.fabric8.kubernetes.client.utils.Serialization
 import kope.krd.fixesModule
 
 
-fun kubernetesClient(kubernetesContext: String?): KubernetesClient {
+fun kubernetesClient(kubernetesContext: String? = null): KubernetesClient {
 
-    val client = DefaultKubernetesClient(Config.autoConfigure(kubernetesContext))
+    val context = kubernetesContext ?: System.getenv("CONTEXT")
+
+    val client = DefaultKubernetesClient(Config.autoConfigure(context))
 
     Serialization.jsonMapper().registerModule(fixesModule)
 
