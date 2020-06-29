@@ -8,12 +8,14 @@ import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
 import kope.krd.Krd
 import kope.krd.KrdDefinition
 import mu.KotlinLogging
+import java.io.Closeable
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 import kotlin.reflect.KClass
 
-abstract class Koperator<K : Kontroller> {
+abstract class Koperator<K : Kontroller> : Closeable {
 
     companion object {
         private val log = KotlinLogging.logger {}
@@ -43,6 +45,16 @@ abstract class Koperator<K : Kontroller> {
         log.info { "[$this] Kontroller tearing down..." }
         kontroller.tearDown()
         log.info { "[$this] Kontroller torn down" }
+    }
+
+    override fun close() {
+        log.info { "[$this] Shutting down execution pool..." }
+        pool.shutdown()
+        if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+            log.info { "[$this] Force shutting down execution pool as it hasn't finished in 30 sec..." }
+            pool.shutdownNow()
+        }
+        log.info { "[$this] Shut down execution pool" }
     }
 }
 
