@@ -84,8 +84,12 @@ fun Koperator<*>.uninstall(client: KubernetesClient) {
 
         definitions.forEach { definition ->
             val context = CustomResourceDefinitionContext.fromCrd(definition)
-            val deletedObjects = client.customResource(context).delete(null)
-            log.info { "Removed objects: $deletedObjects" }
+            try {
+                val deletedObjects = client.customResource(context).delete(null)
+                log.info { "Removed objects: $deletedObjects" }
+            } catch (e: KubernetesClientException) {
+                log.warn(e) { "Removing objects failed for context $context" }
+            }
         }
 
         client.customResourceDefinitions().delete(definitions)
