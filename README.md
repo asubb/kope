@@ -45,6 +45,7 @@ These are parameters of the Launcher to support different use cases. All paramet
 
 * `--class=my.package.MyOperator`. The required parameter for any launch that tells where to find the operator implemnetation. Most likely a temporary parameter as there is no way it would be required to be changed on start-up and must be moved to build time. 
 * `--install`. Flag telling the Launcher to install the Koperator, following the [Installation Routine](#installation-routine). When it is done the Launcher finishes it's job.
+* `--uninstall`. Flag telling the Launcher to uninstall the Koperator, following the [Uninstallation Routine](#uninstallation-routine). When it is done the Launcher finishes it's job.
 * `--context=TheNameOfContext`. By default the kubernetes client uses current active context found in your `~/.kube/config`, that allows you to change which one you wanna use. Also, you may alter the config by using system or environment parameters. Follow [kubernetes client documentation](https://github.com/fabric8io/kubernetes-client#configuring-the-client).
 
 ### Running via gradle
@@ -64,5 +65,9 @@ To run in IDEA add the following `Run/Debug configuration`
 * Program arguments: `--class=my.package.MyOperator`
 
 ### Installation Routine
+
+[TODO]
+
+### Uninstallation Routine
 
 [TODO]

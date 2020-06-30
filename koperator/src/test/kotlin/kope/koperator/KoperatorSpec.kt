@@ -7,9 +7,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
 import com.nhaarman.mockitokotlin2.mock
-import io.fabric8.kubernetes.api.model.ListOptions
-import io.fabric8.kubernetes.client.Config
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClient
 import kope.krd.Krd
 import kope.krd.Metadata
@@ -117,19 +114,9 @@ object KoperatorSpec : Spek({
             kubernetesClient()
         }
 
-        val launcher by memoized(SCOPE) { Launcher(MyKoperator(client), Action.INSTALL, client) }
+        beforeGroup { Launcher(MyKoperator(client), Action.INSTALL, client).use { it.run() } }
 
-        beforeGroup {
-            launcher.use { it.run() }
-        }
-
-        afterGroup {
-            client.customResourceDefinitions().delete(
-                    client.customResourceDefinitions().list()
-                            .items
-                            .filter { it.metadata.name == "my-objects.test.kope.internal" }
-            )
-        }
+        afterGroup { Launcher(MyKoperator(client), Action.UNINSTALL, client).use { it.run() } }
 
         it("should be presented on the cluster") {
             val crd = client.customResourceDefinitions().withName("my-objects.test.kope.internal").get()

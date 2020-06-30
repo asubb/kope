@@ -25,6 +25,11 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
 
     val ktype: KType = clazz.starProjectedType
 
+    val resourceDefinition by lazy {
+        ktype.jvmErasure.findAnnotation<ResourceDefinition>()
+                ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $ktype")
+    }
+
     val yaml: String by lazy { generateYaml() }
 
     val definition: CustomResourceDefinition by lazy { customResourceDefinition() }
@@ -36,8 +41,6 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
     private fun generateYaml(): String = yaml().writeValueAsString(definition)
 
     private fun customResourceDefinition(): CustomResourceDefinition {
-        val resourceDefinition = ktype.jvmErasure.findAnnotation<ResourceDefinition>()
-                ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $ktype")
         return newCustomResourceDefinition {
             apiVersion = resourceDefinition.apiVersion
             metadata {

@@ -1,7 +1,5 @@
 package kope.koperator
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
@@ -69,6 +67,33 @@ fun Koperator<*>.install(client: KubernetesClient) {
             throw KoperatorException("\"Installing resource $krd with definition failed:\\n${g.yaml}\"", e)
         }
     }
+}
+
+fun Koperator<*>.uninstall(client: KubernetesClient) {
+    val log = KotlinLogging.logger {}
+    val kindsToRemove = this.resources.map { krd ->
+        val g = KrdDefinition(krd)
+        g.resourceDefinition.kind
+    }.toSet()
+
+    try {
+        log.info { "Uninstalling resources with kinds:\n${kindsToRemove}" }
+        val definitions = client.customResourceDefinitions().list()
+                .items
+                .filter { it.spec.names.kind in kindsToRemove }
+
+        definitions.forEach { definition ->
+            val context = CustomResourceDefinitionContext.fromCrd(definition)
+            val deletedObjects = client.customResource(context).delete(null)
+            log.info { "Removed objects: $deletedObjects" }
+        }
+
+        client.customResourceDefinitions().delete(definitions)
+        log.info { "Removed objects: $definitions" }
+    } catch (e: KubernetesClientException) {
+        throw KoperatorException("Uninstalling resources with kinds failed:\n${kindsToRemove}", e)
+    }
+
 }
 
 class KoperatorException(message: String, cause: Throwable? = null) : Exception(message, cause)

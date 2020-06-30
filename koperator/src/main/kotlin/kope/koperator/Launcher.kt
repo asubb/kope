@@ -1,8 +1,7 @@
 package kope.koperator
 
 import io.fabric8.kubernetes.client.KubernetesClient
-import kope.koperator.Action.INSTALL
-import kope.koperator.Action.RUN
+import kope.koperator.Action.*
 import mu.KotlinLogging
 import java.io.Closeable
 import kotlin.reflect.KClass
@@ -10,6 +9,7 @@ import kotlin.reflect.typeOf
 
 enum class Action(val flag: String) {
     INSTALL("install"),
+    UNINSTALL("uninstall"),
     RUN("") // default action, is being used if nothing else is specified
 }
 
@@ -75,6 +75,10 @@ class Launcher(
             INSTALL -> {
                 koperator.install(client)
                 log.info { "[$koperator] Operator installation performed" }
+            }
+            UNINSTALL -> {
+                koperator.uninstall(client)
+                log.info { "[$koperator] Operator uninstallation performed" }
             }
             RUN -> {
                 log.info { "[$koperator] Koperator initializing..." }
