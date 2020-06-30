@@ -11,6 +11,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import kope.krd.Krd
 import kope.krd.Metadata
 import kope.krd.ResourceDefinition
+import kope.krd.Scope
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.lifecycle.CachingMode.SCOPE
 import org.spekframework.spek2.style.specification.describe
@@ -91,7 +92,8 @@ object KoperatorSpec : Spek({
                 group = "test.kope.internal",
                 singularName = "my-object",
                 pluralName = "my-objects",
-                apiVersion = "apiextensions.k8s.io/v1beta1"
+                apiVersion = "apiextensions.k8s.io/v1beta1",
+                scope = Scope.CLUSTER
         )
         data class MyObject(
                 override val metadata: Metadata,
