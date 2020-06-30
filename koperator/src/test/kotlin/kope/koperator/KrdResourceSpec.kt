@@ -156,7 +156,7 @@ object KrdResourceSpec : Spek({
             it("should fire ADDED") {
                 l = CountDownLatch(1)
                 krd.create(obj1)
-                l!!.await(1000, TimeUnit.MILLISECONDS)
+                l!!.await(5000, TimeUnit.MILLISECONDS)
                 l = null
                 assertThat(lastActionFired).isNotNull().isEqualTo(Watcher.Action.ADDED)
                 assertThat(lastObject).isNotNull().isEqualTo(obj1)
@@ -165,7 +165,7 @@ object KrdResourceSpec : Spek({
             it("should fire MODIFIED") {
                 l = CountDownLatch(1)
                 krd.createOrReplace(newObj1)
-                l!!.await(1000, TimeUnit.MILLISECONDS)
+                l!!.await(5000, TimeUnit.MILLISECONDS)
                 l = null
                 assertThat(lastActionFired).isNotNull().isEqualTo(Watcher.Action.MODIFIED)
                 assertThat(lastObject).isNotNull().isEqualTo(newObj1)
@@ -174,7 +174,7 @@ object KrdResourceSpec : Spek({
             it("should fire DELETED") {
                 l = CountDownLatch(1)
                 krd.delete(obj1)
-                l!!.await(1000, TimeUnit.MILLISECONDS)
+                l!!.await(5000, TimeUnit.MILLISECONDS)
                 l = null
                 assertThat(lastActionFired).isNotNull().isEqualTo(Watcher.Action.DELETED)
                 assertThat(lastObject).isNotNull().isEqualTo(newObj1)
@@ -215,7 +215,7 @@ object KrdResourceSpec : Spek({
             it("should fire ADDED for obj2") {
                 l = CountDownLatch(1)
                 krd.create(obj2)
-                l!!.await(1000, TimeUnit.MILLISECONDS)
+                l!!.await(5000, TimeUnit.MILLISECONDS)
                 l = null
                 assertThat(lastActionFired).isNotNull().isEqualTo(Watcher.Action.ADDED)
                 assertThat(lastObject).isNotNull().isEqualTo(obj2)
@@ -233,7 +233,7 @@ object KrdResourceSpec : Spek({
             it("should fire MODIFIED for obj2") {
                 l = CountDownLatch(1)
                 krd.createOrReplace(newObj2)
-                l!!.await(1000, TimeUnit.MILLISECONDS)
+                l!!.await(5000, TimeUnit.MILLISECONDS)
                 l = null
                 assertThat(lastActionFired).isNotNull().isEqualTo(Watcher.Action.MODIFIED)
                 assertThat(lastObject).isNotNull().isEqualTo(newObj2)
