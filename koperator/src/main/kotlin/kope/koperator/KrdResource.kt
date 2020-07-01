@@ -76,7 +76,7 @@ class KrdResource<T : Krd>(
                     ?: throw IllegalStateException("$existingObject doesn't contain `metadata.resourceVersion`")
             (asJsonTree.at("/metadata") as ObjectNode).put("resourceVersion", resourceVersion)
         }
-        r.createOrReplace(json.writeValueAsString(asJsonTree))
+        r.edit(obj.metadata.name, json.writeValueAsString(asJsonTree))
     }
 
     fun watch(name: String? = null): Watch<T> {
