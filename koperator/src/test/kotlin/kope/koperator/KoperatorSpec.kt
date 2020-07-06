@@ -71,9 +71,7 @@ object KoperatorSpec : Spek({
         val launcher = Launcher(MyKoperator(client), Action.RUN, client)
 
         beforeGroup {
-            launcher.use {
-                it.run()
-            }
+            launcher.run()
         }
 
         it("should initialize the koperator") { assertThat(koperatorInitialized.get()).isEqualTo(1) }
@@ -116,9 +114,9 @@ object KoperatorSpec : Spek({
             kubernetesClient()
         }
 
-        beforeGroup { Launcher(MyKoperator(client), Action.INSTALL, client).use { it.run() } }
+        beforeGroup { Launcher(MyKoperator(client), Action.INSTALL, client).run() }
 
-        afterGroup { Launcher(MyKoperator(client), Action.UNINSTALL, client).use { it.run() } }
+        afterGroup { Launcher(MyKoperator(client), Action.UNINSTALL, client).run() }
 
         it("should be presented on the cluster") {
             val crd = client.customResourceDefinitions().withName("my-objects.test.kope.internal").get()

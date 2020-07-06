@@ -19,6 +19,7 @@ class KrdResource<T : Krd>(
 ) {
 
     val krdDef = KrdDefinition(clazz)
+    val namespace: String?
 
     private val definitionContext = CustomResourceDefinitionContext.fromCrd(krdDef.definition)
 
@@ -27,10 +28,11 @@ class KrdResource<T : Krd>(
                 krdDef.resourceDefinition.scope == Scope.CLUSTER) {
             "Krd is defined as namespaced but namespace is not specified"
         }
+        namespace = if (krdDef.resourceDefinition.scope == Scope.NAMESPACED) client.namespace else null
     }
 
     fun list(): List<T> {
-        val values = client.customResource(definitionContext).list()
+        val values = client.customResource(definitionContext).list(namespace)
 
         val items = values["items"] as Collection<Any?>?
         if (items == null || items.isEmpty()) return emptyList()
@@ -45,7 +47,7 @@ class KrdResource<T : Krd>(
     fun get(name: String): T? {
         @Suppress("UNCHECKED_CAST")
         return try {
-            client.customResource(definitionContext).get(name).let {
+            client.customResource(definitionContext).get(namespace, name).let {
                 KrdObject.fromJsonTree(krdDef, json.valueToTree(it) as ObjectNode).obj as T
             }
         } catch (e: KubernetesClientException) {
@@ -55,20 +57,24 @@ class KrdResource<T : Krd>(
     }
 
     fun delete(obj: T): Boolean {
-        val deleteResult = client.customResource(definitionContext).delete(obj.metadata.name)
-        return deleteResult.isNotEmpty() && (deleteResult["items"] as Collection<*>?)?.isNotEmpty() ?: false
+        return try {
+            client.customResource(definitionContext).delete(namespace, obj.metadata.name)
+            true
+        } catch (e: KubernetesClientException) {
+            if (e.code == 404) false else throw e
+        }
     }
 
     fun create(obj: T) {
         client.customResource(definitionContext)
-                .create(json.writeValueAsString(krdDef.krdObject(obj).asJsonTree()))
+                .create(namespace, json.writeValueAsString(krdDef.krdObject(obj).asJsonTree()))
     }
 
     fun createOrReplace(obj: T) {
         val asJsonTree = krdDef.krdObject(obj).asJsonTree()
         val r = client.customResource(definitionContext)
 
-        val existingObject = r.get(obj.metadata.name)
+        val existingObject = r.get(namespace, obj.metadata.name)
         if (existingObject != null) {
             @Suppress("UNCHECKED_CAST")
             val resourceVersion = (existingObject["metadata"] as Map<String, Any?>?)
@@ -76,7 +82,7 @@ class KrdResource<T : Krd>(
                     ?: throw IllegalStateException("$existingObject doesn't contain `metadata.resourceVersion`")
             (asJsonTree.at("/metadata") as ObjectNode).put("resourceVersion", resourceVersion)
         }
-        r.edit(obj.metadata.name, json.writeValueAsString(asJsonTree))
+        r.edit(namespace, obj.metadata.name, json.writeValueAsString(asJsonTree))
     }
 
     fun watch(name: String? = null): Watch<T> {
