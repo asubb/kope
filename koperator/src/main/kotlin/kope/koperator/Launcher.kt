@@ -53,16 +53,17 @@ fun main(args: Array<String>) {
         handler(if (v.size > 1) v[1] else null)
     }
 
-    val client = kubernetesClient(kubernetesContext, namespace)
-    log.info { "Kubernetes client created $client" }
+    kubernetesClient(kubernetesContext, namespace).use { client ->
+        log.info { "Kubernetes client created $client" }
 
-    val koperator = koperatorClass.constructors
-            .firstOrNull { it.parameters.size == 1 && it.parameters[0].type == typeOf<KubernetesClient>() }
-            ?.call(client)
-            ?: throw IllegalStateException("Can't find constructor of $koperatorClass with ${KubernetesClient::class} as the only parameter")
-    log.info { "[$koperator] Koperator instantiated" }
+        val koperator = koperatorClass.constructors
+                .firstOrNull { it.parameters.size == 1 && it.parameters[0].type == typeOf<KubernetesClient>() }
+                ?.call(client)
+                ?: throw IllegalStateException("Can't find constructor of $koperatorClass with ${KubernetesClient::class} as the only parameter")
+        log.info { "[$koperator] Koperator instantiated" }
 
-    Launcher(koperator, action, client).run()
+        Launcher(koperator, action, client).run()
+    }
 }
 
 class Launcher(
