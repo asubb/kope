@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.fabric8.kubernetes.api.model.DeleteOptions
 import io.fabric8.kubernetes.api.model.DeletionPropagation
+import io.fabric8.kubernetes.api.model.ListOptions
 import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientException
@@ -65,7 +66,6 @@ abstract class Koperator<K : Kontroller> : Closeable {
 
 fun Koperator<*>.install(client: KubernetesClient) {
     val log = KotlinLogging.logger {}
-    val installPerformed = AtomicBoolean(false)
 
     val resourcesToCreate = this.resources.mapNotNull { krd ->
         val g = KrdDefinition(krd)
@@ -91,13 +91,13 @@ fun Koperator<*>.install(client: KubernetesClient) {
     val names = resourcesToCreate.map { it.metadata.name }.toSet()
     client.customResourceDefinitions().watch(object : Watcher<CustomResourceDefinition> {
         override fun onClose(cause: KubernetesClientException?) {
-            if (!installPerformed.get()) {
+            if (cause != null) {
                 log.warn(cause) { "Problems while creating CRDs:\n${resourcesToCreate.joinToString("\n---\n")}" }
             }
         }
 
         override fun eventReceived(action: Watcher.Action, resource: CustomResourceDefinition) {
-            if (!installPerformed.get() && resource.metadata.name in names) {
+            if (resource.metadata.name in names) {
                 when (action) {
                     Watcher.Action.DELETED, Watcher.Action.MODIFIED, Watcher.Action.ERROR ->
                         log.warn { "Got unexpected action=$action on watch for CRD creation: $resource" }
@@ -108,18 +108,16 @@ fun Koperator<*>.install(client: KubernetesClient) {
                 }
             }
         }
-    })
+    }).use {
+        resourcesToCreate.forEach {
+            client.customResourceDefinitions().create(it)
+        }
 
-    resourcesToCreate.forEach {
-        client.customResourceDefinitions().create(it)
+        l.await(60000, TimeUnit.MILLISECONDS)
     }
-
-    l.await(60000, TimeUnit.MILLISECONDS)
-    installPerformed.set(true)
 }
 
 fun Koperator<*>.reset(client: KubernetesClient) {
-    val resetPerformed = AtomicBoolean(false)
     val log = KotlinLogging.logger {}
     val kindsToRemove = this.resources.map { krd ->
         val g = KrdDefinition(krd)
@@ -142,16 +140,19 @@ fun Koperator<*>.reset(client: KubernetesClient) {
                 val names = items.mapNotNull { item -> (item["metadata"] as Map<String, Any?>?)?.get("name") as String? }.toSet()
 
                 client.customResource(context).watch(
+                        client.namespace,
+                        null,
+                        emptyMap(),
+                        ListOptions(),
                         object : Watcher<String> {
                             override fun onClose(cause: KubernetesClientException?) {
-                                if (!resetPerformed.get()) {
+                                if (cause != null)
                                     log.warn(cause) { "Problems while removing CRD object with names=$names, items=$items" }
-                                }
                             }
 
                             override fun eventReceived(action: Watcher.Action, resource: String) {
                                 val resourceName = json.readTree(resource).at("/metadata/name").textValue()
-                                if (!resetPerformed.get() && resourceName in names) {
+                                if (resourceName in names) {
                                     when (action) {
                                         Watcher.Action.ADDED, Watcher.Action.MODIFIED, Watcher.Action.ERROR ->
                                             log.warn { "Got unexpected action=$action on watch for CRD Object deletion: $resource" }
@@ -163,16 +164,16 @@ fun Koperator<*>.reset(client: KubernetesClient) {
                                 }
                             }
                         }
-                )
+                ).use {
+                    val deleteOptions = DeleteOptions()
+                    deleteOptions.gracePeriodSeconds = 0
+                    deleteOptions.propagationPolicy = "Foreground"
+                    val deletedObjects = client.customResource(context).delete(client.namespace, deleteOptions)
 
-                val deleteOptions = DeleteOptions()
-                deleteOptions.gracePeriodSeconds = 0
-                deleteOptions.propagationPolicy = "Foreground"
-                val deletedObjects = client.customResource(context).delete(client.namespace, deleteOptions)
+                    l.await(60000, TimeUnit.MILLISECONDS)
 
-                l.await(60000, TimeUnit.MILLISECONDS)
-
-                log.info { "Removed objects (${(deletedObjects["items"] as Collection<*>).size}): $deletedObjects" }
+                    log.info { "Removed objects (${(deletedObjects["items"] as Collection<*>).size}): $deletedObjects" }
+                }
             }
         } catch (e: KubernetesClientException) {
             log.warn(e) { "Removing objects failed for context $context" }
@@ -184,7 +185,6 @@ fun Koperator<*>.uninstall(client: KubernetesClient) {
 
     reset(client)
 
-    val uninstallPerformed = AtomicBoolean(false)
     val log = KotlinLogging.logger {}
     val kindsToRemove = this.resources.map { krd ->
         val g = KrdDefinition(krd)
@@ -202,13 +202,13 @@ fun Koperator<*>.uninstall(client: KubernetesClient) {
             client.customResourceDefinitions().watch(
                     object : Watcher<CustomResourceDefinition> {
                         override fun onClose(cause: KubernetesClientException?) {
-                            if (!uninstallPerformed.get()) {
+                            if (cause != null) {
                                 log.warn(cause) { "Problems while removing CRD with names=$names, definitions=$definitions" }
                             }
                         }
 
                         override fun eventReceived(action: Watcher.Action, resource: CustomResourceDefinition) {
-                            if (!uninstallPerformed.get() && resource.metadata.name in names) {
+                            if (resource.metadata.name in names) {
                                 when (action) {
                                     Watcher.Action.ADDED, Watcher.Action.MODIFIED, Watcher.Action.ERROR ->
                                         log.warn { "Got unexpected action=$action on watch for CRD deletion: $resource" }
@@ -221,23 +221,21 @@ fun Koperator<*>.uninstall(client: KubernetesClient) {
 
                         }
                     }
-            )
-            definitions.forEach {
-                client.customResourceDefinitions()
-                        .withName(it.metadata.name)
-                        .withPropagationPolicy(DeletionPropagation.FOREGROUND)
-                        .delete()
-            }
-            l.await(60000, TimeUnit.MILLISECONDS)
+            ).use {
+                definitions.forEach {
+                    client.customResourceDefinitions()
+                            .withName(it.metadata.name)
+                            .withPropagationPolicy(DeletionPropagation.FOREGROUND)
+                            .delete()
+                }
+                l.await(60000, TimeUnit.MILLISECONDS)
 
-            log.info { "Removed definitions (${definitions.size}): $definitions" }
+                log.info { "Removed definitions (${definitions.size}): $definitions" }
+            }
         }
     } catch (e: KubernetesClientException) {
         throw KoperatorException("Uninstalling resources with kinds failed:\n${kindsToRemove}", e)
-    } finally {
-        uninstallPerformed.set(true)
     }
-
 }
 
 class KoperatorException(message: String, cause: Throwable? = null) : Exception(message, cause)
