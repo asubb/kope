@@ -79,7 +79,7 @@ fun Koperator<*>.install(client: KubernetesClient) {
             if (crd == null) {
                 g.definition
             } else {
-                log.warn { "CRD is already installed:\n${g.yaml}" }
+                log.warn { "CRD is already installed, it won't be installed:\n${g.yaml}" }
                 null
             }
         } catch (e: KubernetesClientException) {

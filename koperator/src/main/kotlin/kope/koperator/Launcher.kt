@@ -3,7 +3,6 @@ package kope.koperator
 import io.fabric8.kubernetes.client.KubernetesClient
 import kope.koperator.Action.*
 import mu.KotlinLogging
-import java.io.Closeable
 import kotlin.reflect.KClass
 import kotlin.reflect.typeOf
 
