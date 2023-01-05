@@ -9,8 +9,8 @@ import mu.KotlinLogging
 
 
 fun kubernetesClient(
-        kubernetesContext: String? = null,
-        namespace: String? = null
+    kubernetesContext: String? = null,
+    namespace: String? = null
 ): KubernetesClient {
     val log = KotlinLogging.logger { }
 
@@ -19,7 +19,7 @@ fun kubernetesClient(
     log.info { "Creating Kubernetes client: context=$context, namespace=$namespace" }
 
     val client = DefaultKubernetesClient(Config.autoConfigure(context))
-            .inNamespace(namespace)
+        .let { if (namespace != null) it.inNamespace(namespace) else it }
 
     Serialization.jsonMapper().registerModule(fixesModule)
 

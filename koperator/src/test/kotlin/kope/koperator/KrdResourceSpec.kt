@@ -6,6 +6,8 @@ import assertk.assertThat
 import assertk.assertions.*
 import com.fkorotkov.kubernetes.metadata
 import com.fkorotkov.kubernetes.newNamespace
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource
+import io.fabric8.kubernetes.api.model.ObjectMeta
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.Watcher
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
@@ -16,7 +18,6 @@ import kope.krd.Scope
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.lifecycle.CachingMode
 import org.spekframework.spek2.style.specification.describe
-import java.lang.Thread.sleep
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.reflect.KClass
@@ -26,22 +27,22 @@ object KrdResourceSpec : Spek({
 
     describe("Namespaced") {
         @ResourceDefinition(
-                name = "myobjects.test.kope.internal",
-                kind = "MyObject",
-                version = "v1",
-                group = "test.kope.internal",
-                singularName = "myobject",
-                pluralName = "myobjects",
-                apiVersion = "apiextensions.k8s.io/v1beta1",
-                scope = Scope.NAMESPACED
+            name = "myobjects.test.kope.internal",
+            kind = "MyObject",
+            version = "v1",
+            group = "test.kope.internal",
+            singularName = "myobject",
+            pluralName = "myobjects",
+            scope = Scope.NAMESPACED
         )
         data class MyObject(
-                override val metadata: Metadata,
-                val myField: Int
+            override val metadata: Metadata,
+            val myField: Int
         ) : Krd
 
         class MyKontroller(override val client: KubernetesClient) : Kontroller {
-            override fun main(): Unit = throw UnsupportedOperationException("Why are you calling this?")
+            override fun main(): Unit =
+                throw UnsupportedOperationException("Why are you calling this?")
         }
 
         class MyKoperator(client: KubernetesClient) : Koperator<MyKontroller>() {
@@ -82,11 +83,15 @@ object KrdResourceSpec : Spek({
                 val id = "myobject1"
                 krd.create(MyObject(Metadata(id), 1))
 
-                val storedObj = client.customResource(CustomResourceDefinitionContext.fromCrd(krd.krdDef.definition)).get(testNamespace, id)
+                val storedObj =
+                    client.genericKubernetesResources(CustomResourceDefinitionContext.fromCrd(krd.krdDef.definition))
+                        .withName(id)
+                        .get()
 
                 assertThat(storedObj).isNotNull().all {
-                    m("metadata").o("name").isEqualTo(id)
-                    o("kind").isEqualTo("MyObject")
+                    prop(GenericKubernetesResource::getMetadata)
+                        .prop(ObjectMeta::getName).isEqualTo(id)
+                    prop(GenericKubernetesResource::getKind).isEqualTo("MyObject")
                     o("myField").isEqualTo(1)
                 }
             }
@@ -98,14 +103,15 @@ object KrdResourceSpec : Spek({
                 krd.create(MyObject(Metadata(id), 1))
                 krd.createOrReplace(MyObject(Metadata(id), 2))
 
-                val storedObj = client.customResource(
-                        CustomResourceDefinitionContext.fromCrd(krd.krdDef.definition)
-                )
-                        .get(testNamespace, id)
+                val storedObj =
+                    client.genericKubernetesResources(CustomResourceDefinitionContext.fromCrd(krd.krdDef.definition))
+                        .withName(id)
+                        .get()
 
                 assertThat(storedObj).isNotNull().all {
-                    m("metadata").o("name").isEqualTo(id)
-                    o("kind").isEqualTo("MyObject")
+                    prop(GenericKubernetesResource::getMetadata)
+                        .prop(ObjectMeta::getName).isEqualTo(id)
+                    prop(GenericKubernetesResource::getKind).isEqualTo("MyObject")
                     o("myField").isEqualTo(2)
                 }
             }
@@ -156,12 +162,12 @@ object KrdResourceSpec : Spek({
                 var l: CountDownLatch? = null
                 beforeGroup {
                     krd.watch()
-                            .onAction { action, obj ->
-                                if (l != null) l!!.countDown()
-                                lastActionFired = action
-                                lastObject = obj
-                            }
-                            .onClose { lastError = it }
+                        .onAction { action, obj ->
+                            if (l != null) l!!.countDown()
+                            lastActionFired = action
+                            lastObject = obj
+                        }
+                        .onClose { lastError = it }
                 }
 
                 val obj1 = MyObject(Metadata("myobject1"), 1)
@@ -208,12 +214,12 @@ object KrdResourceSpec : Spek({
 
                 beforeGroup {
                     krd.watch("myobject2")
-                            .onAction { action, obj ->
-                                if (l != null) l!!.countDown()
-                                lastActionFired = action
-                                lastObject = obj
-                            }
-                            .onClose { lastError = it }
+                        .onAction { action, obj ->
+                            if (l != null) l!!.countDown()
+                            lastActionFired = action
+                            lastObject = obj
+                        }
+                        .onClose { lastError = it }
                 }
 
                 val obj1 = MyObject(Metadata("myobject1"), 1)
@@ -281,9 +287,6 @@ object KrdResourceSpec : Spek({
     }
 })
 
-@Suppress("UNCHECKED_CAST")
-private fun Assert<Map<String, Any?>>.m(key: String): Assert<Map<String, Any?>> =
-        this.prop("map@$key") { it[key] as Map<String, Any?> }
 
-private fun Assert<Map<String, Any?>>.o(key: String): Assert<Any?> =
-        this.prop("object@$key") { it[key] }
+private fun Assert<GenericKubernetesResource>.o(key: String): Assert<Any?> =
+    this.prop("object@$key") { it.additionalProperties[key] }

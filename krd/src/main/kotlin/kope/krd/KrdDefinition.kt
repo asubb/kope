@@ -5,10 +5,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.fkorotkov.kubernetes.apiextensions.*
-import io.fabric8.kubernetes.api.model.apiextensions.CustomResourceDefinition
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaProps
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrArray
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrBool
+import com.fkorotkov.kubernetes.apiextensions.v1.*
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaProps
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsOrArray
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsOrBool
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
 import kotlin.reflect.full.declaredMemberProperties
@@ -18,16 +19,19 @@ import kotlin.reflect.full.starProjectedType
 import kotlin.reflect.jvm.jvmErasure
 import kotlin.reflect.typeOf
 
-internal fun yaml(): ObjectMapper = ObjectMapper(YAMLFactory()).registerKotlinModule().registerModule(fixesModule)
-internal fun json(): ObjectMapper = ObjectMapper().registerKotlinModule().registerModule(fixesModule)
+internal fun yaml(): ObjectMapper =
+    ObjectMapper(YAMLFactory()).registerKotlinModule().registerModule(fixesModule)
 
-class KrdDefinition(val clazz: KClass<out Krd>) {
+internal fun json(): ObjectMapper =
+    ObjectMapper().registerKotlinModule().registerModule(fixesModule)
+
+class KrdDefinition(clazz: KClass<out Krd>) {
 
     val ktype: KType = clazz.starProjectedType
 
     val resourceDefinition by lazy {
         ktype.jvmErasure.findAnnotation<ResourceDefinition>()
-                ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $ktype")
+            ?: throw IllegalStateException("Specify ${ResourceDefinition::class} annotation on specified class $ktype")
     }
 
     val yaml: String by lazy { generateYaml() }
@@ -36,7 +40,8 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
 
     fun krdObject(obj: Krd): KrdObject = KrdObject(this, obj)
 
-    fun krdObjectFromJson(json: String): KrdObject = KrdObject.fromJsonTree(this, json().readTree(json) as ObjectNode)
+    fun krdObjectFromJson(json: String): KrdObject =
+        KrdObject.fromJsonTree(this, json().readTree(json) as ObjectNode)
 
     private fun generateYaml(): String = yaml().writeValueAsString(definition)
 
@@ -56,36 +61,30 @@ class KrdDefinition(val clazz: KClass<out Krd>) {
                     kind = resourceDefinition.kind
                     shortNames = resourceDefinition.shortNames.toList()
                 }
-                version = resourceDefinition.version
+                additionalProperties["version"] = resourceDefinition.version
                 versions = listOf(
-                        newCustomResourceDefinitionVersion {
-                            name = resourceDefinition.version
-                            served = true
-                            storage = true
-                            if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1") {
-                                schema {
-                                    openAPIV3Schema = generateJsonSchemaOf(ktype)
-                                }
-                            }
+                    newCustomResourceDefinitionVersion {
+                        name = resourceDefinition.version
+                        served = true
+                        storage = true
+                        schema {
+                            openAPIV3Schema = generateJsonSchemaOf(ktype)
                         }
-                )
-                if (resourceDefinition.apiVersion == "apiextensions.k8s.io/v1beta1") {
-                    validation = newCustomResourceValidation {
-                        openAPIV3Schema = generateJsonSchemaOf(ktype)
                     }
-                }
+                )
             }
         }
     }
 }
 
 private fun generateJsonSchemaOf(
-        ktype: KType,
-        annotations: List<Annotation> = emptyList(),
-        nullableProperty: Boolean = false
+    ktype: KType,
+    annotations: List<Annotation> = emptyList(),
+    nullableProperty: Boolean = false
 ): JSONSchemaProps {
     return newJSONSchemaProps {
-        val propertyDefinition = annotations.firstOrNull { it is PropertyDefinition } as PropertyDefinition?
+        val propertyDefinition =
+            annotations.firstOrNull { it is PropertyDefinition } as PropertyDefinition?
 
         if (propertyDefinition != null && propertyDefinition.description.isNotEmpty())
             description = propertyDefinition.description
@@ -96,20 +95,25 @@ private fun generateJsonSchemaOf(
         when {
             ktype == typeOf<String>() || ktype == typeOf<String?>() -> {
                 type = "string"
-                val stringDefinition = annotations.firstOrNull { it is StringDefinition } as StringDefinition?
+                val stringDefinition =
+                    annotations.firstOrNull { it is StringDefinition } as StringDefinition?
                 if (stringDefinition != null) {
                     if (stringDefinition.format.isNotEmpty()) format = stringDefinition.format
                     if (stringDefinition.pattern.isNotEmpty()) pattern = stringDefinition.pattern
-                    if (stringDefinition.minLength >= 0) minLength = stringDefinition.minLength.toLong()
-                    if (stringDefinition.maxLength >= 0) maxLength = stringDefinition.maxLength.toLong()
+                    if (stringDefinition.minLength >= 0) minLength =
+                        stringDefinition.minLength.toLong()
+                    if (stringDefinition.maxLength >= 0) maxLength =
+                        stringDefinition.maxLength.toLong()
                 }
             }
+
             ktype == typeOf<Short>() || ktype == typeOf<Int>() || ktype == typeOf<Long>() ||
                     ktype == typeOf<Double>() || ktype == typeOf<Float>() || ktype == typeOf<Short?>() ||
                     ktype == typeOf<Int?>() || ktype == typeOf<Long?>() || ktype == typeOf<Double?>() ||
                     ktype == typeOf<Float?>() -> {
                 type = "number"
-                val numberDefinition = annotations.firstOrNull { it is NumberDefinition } as NumberDefinition?
+                val numberDefinition =
+                    annotations.firstOrNull { it is NumberDefinition } as NumberDefinition?
                 if (numberDefinition != null) {
                     if (numberDefinition.minimum != NAN)
                         minimum = numberDefinition.minimum
@@ -117,25 +121,30 @@ private fun generateJsonSchemaOf(
                         maximum = numberDefinition.maximum
                 }
             }
+
             ktype.isSubtypeOf(typeOf<Map<String, *>>()) -> {
                 type = "object"
                 additionalProperties = JSONSchemaPropsOrBool(true, null)
             }
+
             ktype.isSubtypeOf(typeOf<Iterable<*>>()) -> {
                 type = "array"
                 items = JSONSchemaPropsOrArray(
-                        null,
-                        generateJsonSchemaOf(
-                                ktype.arguments.getOrNull(0)?.type
-                                        ?: throw UnsupportedOperationException(
-                                                "Type parameters for iterable class are not as expected ${ktype.arguments}. " +
-                                                        "Expected to be exactly one type parameter, i.e. List<MyClass>."
-                                        )
-                        )
+                    null,
+                    generateJsonSchemaOf(
+                        ktype.arguments.getOrNull(0)?.type
+                            ?: throw UnsupportedOperationException(
+                                "Type parameters for iterable class are not as expected ${ktype.arguments}. " +
+                                        "Expected to be exactly one type parameter, i.e. List<MyClass>."
+                            )
+                    )
                 )
             }
+
             else -> {
-                if (ktype.jvmErasure.javaPrimitiveType != null) throw UnsupportedOperationException("$ktype support is not implemented")
+                if (ktype.jvmErasure.javaPrimitiveType != null) throw UnsupportedOperationException(
+                    "$ktype support is not implemented"
+                )
                 type = "object"
                 val props = ktype.jvmErasure.declaredMemberProperties
                 if (props.isEmpty()) {
@@ -145,13 +154,13 @@ private fun generateJsonSchemaOf(
                         if (it.findAnnotation<Ignore>() != null) return@mapNotNull null
 
                         val name = it.findAnnotation<PropertyDefinition>()
-                                ?.name
-                                ?.let { name -> if (name.isNotEmpty()) name else null }
-                                ?: it.name
+                            ?.name
+                            ?.let { name -> if (name.isNotEmpty()) name else null }
+                            ?: it.name
                         name to generateJsonSchemaOf(
-                                ktype = it.returnType,
-                                annotations = it.annotations,
-                                nullableProperty = it.returnType.isMarkedNullable
+                            ktype = it.returnType,
+                            annotations = it.annotations,
+                            nullableProperty = it.returnType.isMarkedNullable
                         )
                     }.toMap()
                 }

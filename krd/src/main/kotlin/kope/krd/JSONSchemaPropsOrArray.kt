@@ -6,8 +6,8 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.JsonSerializer
 import com.fasterxml.jackson.databind.SerializerProvider
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaProps
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrArray
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaProps
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsOrArray
 import java.io.IOException
 
 @Deprecated("Temporary fix")

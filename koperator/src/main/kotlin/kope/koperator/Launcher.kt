@@ -34,7 +34,7 @@ fun main(args: Array<String>) {
                 log.info { "Found Koperator class $koperatorClass" }
             },
             "context" to { arg ->
-                require(arg != null) { "Parameter --profile requires to have a value." }
+                require(arg != null) { "Parameter --context requires to have a value." }
                 kubernetesContext = arg
             },
             "namespace" to { arg ->

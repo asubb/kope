@@ -30,7 +30,7 @@ class KrdObject(val krdDefinition: KrdDefinition, val obj: Krd) {
                 .takeIf { !it.isMissingNode } as ObjectNode?
                 ?: throw IllegalStateException("Something went wrong -- missing node returned for a root node")
         val def = krdDefinition.definition
-        root.put("apiVersion", def.spec.group + "/" + def.spec.version)
+        root.put("apiVersion", def.spec.group + "/" + def.spec.additionalProperties["version"])
         root.put("kind", def.spec.names.kind)
         return root
     }

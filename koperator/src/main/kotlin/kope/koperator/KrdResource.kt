@@ -1,12 +1,15 @@
 package kope.koperator
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import io.fabric8.kubernetes.api.model.ListOptions
+import com.fasterxml.jackson.module.kotlin.treeToValue
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.Watcher
+import io.fabric8.kubernetes.client.WatcherException
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext
 import kope.krd.*
 import kotlin.reflect.KClass
@@ -14,8 +17,8 @@ import kotlin.reflect.KClass
 private val json by lazy { ObjectMapper().registerKotlinModule().registerModule(fixesModule) }
 
 class KrdResource<T : Krd>(
-        val client: KubernetesClient,
-        val clazz: KClass<T>
+    val client: KubernetesClient,
+    val clazz: KClass<T>
 ) {
 
     val krdDef = KrdDefinition(clazz)
@@ -24,31 +27,38 @@ class KrdResource<T : Krd>(
     private val definitionContext = CustomResourceDefinitionContext.fromCrd(krdDef.definition)
 
     init {
-        check(client.namespace != null && krdDef.resourceDefinition.scope == Scope.NAMESPACED ||
-                krdDef.resourceDefinition.scope == Scope.CLUSTER) {
+        check(
+            client.namespace != null && krdDef.resourceDefinition.scope == Scope.NAMESPACED ||
+                    krdDef.resourceDefinition.scope == Scope.CLUSTER
+        ) {
             "Krd is defined as namespaced but namespace is not specified"
         }
-        namespace = if (krdDef.resourceDefinition.scope == Scope.NAMESPACED) client.namespace else null
+        namespace =
+            if (krdDef.resourceDefinition.scope == Scope.NAMESPACED) client.namespace else null
     }
 
     fun list(): List<T> {
-        val values = client.customResource(definitionContext).list(namespace)
+        val values = client.genericKubernetesResources(definitionContext).list()
 
-        val items = values["items"] as Collection<Any?>?
+        val items = values.items
         if (items == null || items.isEmpty()) return emptyList()
 
         @Suppress("UNCHECKED_CAST")
         return items.asSequence()
-                .map { it as Map<String, Any?> }
-                .map { KrdObject.fromJsonTree(krdDef, json.valueToTree(it) as ObjectNode).obj as T }
-                .toList()
+            .map { KrdObject.fromJsonTree(krdDef, json.valueToTree(it) as ObjectNode).obj as T }
+            .toList()
     }
 
     fun get(name: String): T? {
         @Suppress("UNCHECKED_CAST")
         return try {
-            client.customResource(definitionContext).get(namespace, name).let {
-                KrdObject.fromJsonTree(krdDef, json.valueToTree(it) as ObjectNode).obj as T
+            client.genericKubernetesResources(definitionContext).withName(name).get().let {
+                val node = json.valueToTree<JsonNode>(it)
+                if (node is ObjectNode) {
+                    KrdObject.fromJsonTree(krdDef, node).obj as T
+                } else {
+                    null
+                }
             }
         } catch (e: KubernetesClientException) {
             if (e.status.code == 404) null
@@ -58,31 +68,40 @@ class KrdResource<T : Krd>(
 
     fun delete(obj: T): Boolean {
         return try {
-            client.customResource(definitionContext).delete(namespace, obj.metadata.name)
-            true
+            val status =
+                client.genericKubernetesResources(definitionContext).withName(obj.metadata.name)
+                    .delete()
+            return status.size > 0
         } catch (e: KubernetesClientException) {
             if (e.code == 404) false else throw e
         }
     }
 
     fun create(obj: T) {
-        client.customResource(definitionContext)
-                .create(namespace, json.writeValueAsString(krdDef.krdObject(obj).asJsonTree()))
+        val resource = GenericKubernetesResource().also {
+            it.additionalProperties = json.treeToValue(krdDef.krdObject(obj).asJsonTree())
+        }
+        client.genericKubernetesResources(definitionContext)
+            .withName(obj.metadata.name)
+            .create(resource)
     }
 
     fun createOrReplace(obj: T) {
         val asJsonTree = krdDef.krdObject(obj).asJsonTree()
-        val r = client.customResource(definitionContext)
+        val r = client.genericKubernetesResources(definitionContext)
 
-        val existingObject = r.get(namespace, obj.metadata.name)
+        val existingObject = r.withName(obj.metadata.name).get()
         if (existingObject != null) {
             @Suppress("UNCHECKED_CAST")
-            val resourceVersion = (existingObject["metadata"] as Map<String, Any?>?)
-                    ?.get("resourceVersion") as String?
-                    ?: throw IllegalStateException("$existingObject doesn't contain `metadata.resourceVersion`")
+            val resourceVersion = existingObject.metadata
+                .resourceVersion
+                ?: throw IllegalStateException("$existingObject doesn't contain `metadata.resourceVersion`")
             (asJsonTree.at("/metadata") as ObjectNode).put("resourceVersion", resourceVersion)
         }
-        r.edit(namespace, obj.metadata.name, json.writeValueAsString(asJsonTree))
+        r.withName(obj.metadata.name).edit {
+            it.additionalProperties = json.treeToValue(krdDef.krdObject(obj).asJsonTree())
+            it
+        }
     }
 
     fun watch(name: String? = null): Watch<T> {
@@ -91,15 +110,15 @@ class KrdResource<T : Krd>(
 }
 
 class Watch<T : Krd>(
-        val name: String?,
-        val client: KubernetesClient,
-        clazz: KClass<T>
+    val name: String?,
+    val client: KubernetesClient,
+    clazz: KClass<T>
 ) {
     private val krdDef = KrdDefinition(clazz)
     private val definitionContext = CustomResourceDefinitionContext.fromCrd(krdDef.definition)
 
     private var onActionCallback: ((Watcher.Action, T) -> Unit)? = null
-    private var onCloseCallback: ((KubernetesClientException?) -> Unit)? = null
+    private var onCloseCallback: ((Exception?) -> Unit)? = null
     private var isBeingWatched = false
 
     fun onAction(callback: (Watcher.Action, T) -> Unit): Watch<T> {
@@ -108,7 +127,7 @@ class Watch<T : Krd>(
         return this
     }
 
-    fun onClose(callback: (KubernetesClientException?) -> Unit): Watch<T> {
+    fun onClose(callback: (Exception?) -> Unit): Watch<T> {
         onCloseCallback = callback
         doWatch()
         return this
@@ -117,26 +136,30 @@ class Watch<T : Krd>(
     private fun doWatch() {
         if (!isBeingWatched) {
             isBeingWatched = true
-            client.customResource(definitionContext).watch(
-                    client.namespace,
-                    name,
-                    emptyMap(),
-                    ListOptions(),
-                    object : Watcher<String> {
+            client.genericKubernetesResources(definitionContext)
+                .let { if (name != null) it.withName(name) else it }
+                .watch(
+                    object : Watcher<GenericKubernetesResource> {
 
-                        override fun onClose(cause: KubernetesClientException?) {
+                        override fun onClose(cause: WatcherException?) {
                             if (onCloseCallback != null) onCloseCallback!!.invoke(cause)
                         }
 
-                        override fun eventReceived(action: Watcher.Action, resource: String) {
+                        override fun eventReceived(
+                            action: Watcher.Action,
+                            resource: GenericKubernetesResource
+                        ) {
                             @Suppress("UNCHECKED_CAST")
                             if (onActionCallback != null) {
-                                val o = krdDef.krdObjectFromJson(resource).obj as T
+                                val o = KrdObject.fromJsonTree(
+                                    krdDef, json.valueToTree(resource)
+                                            as ObjectNode
+                                ).obj as T
                                 onActionCallback!!.invoke(action, o)
                             }
                         }
                     }
-            )
+                )
         }
     }
 }

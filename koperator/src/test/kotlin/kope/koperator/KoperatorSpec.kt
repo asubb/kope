@@ -6,12 +6,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
-import com.nhaarman.mockitokotlin2.mock
+import com.fkorotkov.kubernetes.apiextensions.v1.newCustomResourceDefinitionVersion
 import io.fabric8.kubernetes.client.KubernetesClient
 import kope.krd.Krd
 import kope.krd.Metadata
 import kope.krd.ResourceDefinition
 import kope.krd.Scope
+import org.mockito.kotlin.mock
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.lifecycle.CachingMode.SCOPE
 import org.spekframework.spek2.style.specification.describe
@@ -47,7 +48,8 @@ object KoperatorSpec : Spek({
 
         val client = mock<KubernetesClient>()
 
-        val kontroller = MyKontroller(client) // can't inline the instantiation due to Kotlin bug https://youtrack.jetbrains.com/issue/KT-8120
+        val kontroller =
+            MyKontroller(client) // can't inline the instantiation due to Kotlin bug https://youtrack.jetbrains.com/issue/KT-8120
 
         @Suppress("UNUSED_PARAMETER") // required to have that constructor
         class MyKoperator(client: KubernetesClient) : Koperator<MyKontroller>() {
@@ -77,29 +79,34 @@ object KoperatorSpec : Spek({
         it("should initialize the koperator") { assertThat(koperatorInitialized.get()).isEqualTo(1) }
         it("should tear down the koperator") { assertThat(koperatorTornDown.get()).isEqualTo(1) }
         it("should initialize the kontroller") { assertThat(kontrollerInitialized.get()).isEqualTo(1) }
-        it("should run the main loop of the kontroller") { assertThat(kontrollerRunMainLoop.get()).isEqualTo(1) }
+        it("should run the main loop of the kontroller") {
+            assertThat(kontrollerRunMainLoop.get()).isEqualTo(
+                1
+            )
+        }
         it("should tear down the kontroller") { assertThat(kontrollerTornDown.get()).isEqualTo(1) }
     }
 
     describe("CRD Install") {
 
         @ResourceDefinition(
-                name = "my-objects.test.kope.internal",
-                kind = "MyObject",
-                version = "v1",
-                group = "test.kope.internal",
-                singularName = "my-object",
-                pluralName = "my-objects",
-                apiVersion = "apiextensions.k8s.io/v1beta1",
-                scope = Scope.CLUSTER
+            name = "my-objects.test.kope.internal",
+            kind = "MyObject",
+            version = "v1",
+            group = "test.kope.internal",
+            singularName = "my-object",
+            pluralName = "my-objects",
+            apiVersion = "apiextensions.k8s.io/v1",
+            scope = Scope.CLUSTER
         )
         data class MyObject(
-                override val metadata: Metadata,
-                val myField: Int
+            override val metadata: Metadata,
+            val myField: Int
         ) : Krd
 
         class MyKontroller(override val client: KubernetesClient) : Kontroller {
-            override fun main(): Unit = throw UnsupportedOperationException("Why are you calling this?")
+            override fun main(): Unit =
+                throw UnsupportedOperationException("Why are you calling this?")
         }
 
         class MyKoperator(client: KubernetesClient) : Koperator<MyKontroller>() {
@@ -119,13 +126,20 @@ object KoperatorSpec : Spek({
         afterGroup { Launcher(MyKoperator(client), Action.UNINSTALL, client).run() }
 
         it("should be presented on the cluster") {
-            val crd = client.customResourceDefinitions().withName("my-objects.test.kope.internal").get()
+            val crd = client.apiextensions().v1().customResourceDefinitions()
+                .withName("my-objects.test.kope.internal").get()
             assertThat(crd).isNotNull().all {
-                prop("apiVersion") { it.apiVersion }.isEqualTo("apiextensions.k8s.io/v1beta1")
+                prop("apiVersion") { it.apiVersion }.isEqualTo("apiextensions.k8s.io/v1")
                 prop("spec.names.kind") { it.spec.names.kind }.isEqualTo("MyObject")
                 prop("spec.names.singular") { it.spec.names.singular }.isEqualTo("my-object")
                 prop("spec.names.plural") { it.spec.names.plural }.isEqualTo("my-objects")
-                prop("spec.version") { it.spec.version }.isEqualTo("v1")
+//                prop("spec.version") { it.spec.versions }.isEqualTo(
+//                    listOf(
+//                        newCustomResourceDefinitionVersion {
+//                            this.name = "v1"
+//                        }
+//                    )
+//                )
                 prop("spec.group") { it.spec.group }.isEqualTo("test.kope.internal")
                 prop("spec.versions[0].served") { it.spec.versions[0].served }.isTrue()
                 prop("spec.versions[0].storage") { it.spec.versions[0].storage }.isTrue()

@@ -1,8 +1,8 @@
 package kope.krd
 
 import com.fasterxml.jackson.databind.module.SimpleModule
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrArray
-import io.fabric8.kubernetes.api.model.apiextensions.JSONSchemaPropsOrBool
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsOrArray
+import io.fabric8.kubernetes.api.model.apiextensions.v1.JSONSchemaPropsOrBool
 
 val fixesModule by lazy {
     val module = SimpleModule()

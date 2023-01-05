@@ -8,7 +8,7 @@ plugins {
     `maven-publish`
 }
 
-allprojects {
+subprojects {
 
     group = "kope"
 
@@ -19,7 +19,7 @@ allprojects {
     }
 
     repositories {
-        jcenter()
+        maven { setUrl("https://jitpack.io") }
         mavenCentral()
     }
 
@@ -36,12 +36,12 @@ allprojects {
     dependencies {
         implementation(kotlin("stdlib-jdk8"))
         implementation(kotlin("reflect"))
-        implementation("io.fabric8:kubernetes-model:4.10.2")
 
+        testImplementation("ch.qos.logback:logback-classic:1.2.3")
         testImplementation("org.spekframework.spek2:spek-dsl-jvm:$spekVersion")
         testRuntimeOnly("org.spekframework.spek2:spek-runner-junit5:$spekVersion")
-        testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.13")
-        testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
+        testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.25")
+        testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
     }
 
     java {
@@ -63,7 +63,7 @@ allprojects {
     tasks.jar {
         manifest {
             attributes(
-                    "Kope-Version" to properties["version"]
+                "Kope-Version" to properties["version"]
             )
         }
     }
